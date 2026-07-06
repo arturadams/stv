@@ -1,0 +1,1 @@
+cards should have amount of times to resolve, so that the queue can actually acumulate stuff, and it gives a bit more time to understand how to play each hand of cards, so is a bit more strategic and not THAT fast.

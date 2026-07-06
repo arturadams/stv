@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Arcana Engine — a real-time deckbuilding roguelite</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="vignette"></div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="topleft">
+      <div class="bar-label">VITALITY</div>
+      <div id="hp-bar" class="bar"><div id="hp-fill"></div><span id="hp-text" class="bar-text"></span></div>
+      <div class="bar-label">FLOW</div>
+      <div id="flow-bar" class="bar"><div id="flow-fill"></div><span id="flow-text" class="bar-text"></span></div>
+      <div id="armor-chip"></div>
+      <div id="chips"></div>
+    </div>
+    <div id="topright">
+      <div id="encounter-label"></div>
+      <div id="wave-label"></div>
+      <div id="relics"></div>
+    </div>
+    <div id="combo" class="hidden"></div>
+    <div id="stolen-note" class="hidden"></div>
+    <div id="boss-bar" class="hidden">
+      <div id="boss-name"></div>
+      <div class="bar boss"><div id="boss-fill"></div></div>
+    </div>
+    <div id="banner" class="hidden">
+      <div id="banner-title"></div>
+      <div id="banner-sub"></div>
+    </div>
+    <div id="pause-note" class="hidden">PAUSED — press P to resume</div>
+
+    <!-- the card pipeline: Deck → Queue → Channel → Discard -->
+    <div id="pipeline">
+      <div class="pile" id="deck-pile">
+        <div class="pile-card"><span class="pile-glyph">⎘</span><span id="deck-count">0</span></div>
+        <div class="pile-label">DECK</div>
+      </div>
+      <div class="pipe-arrow">❯</div>
+      <div id="queue-wrap">
+        <div id="queue-row"></div>
+        <div class="pile-label">QUEUE</div>
+      </div>
+      <div class="pipe-arrow">❯</div>
+      <div id="channel-wrap">
+        <div id="channel-slot"></div>
+        <div class="pile-label">CHANNEL</div>
+      </div>
+      <div class="pipe-arrow">❯</div>
+      <div class="pile" id="discard-pile">
+        <div class="pile-card dim"><span class="pile-glyph">☓</span><span id="discard-count">0</span></div>
+        <div class="pile-label">DISCARD</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Title -->
+  <div id="title-overlay" class="overlay">
+    <div class="title-frame">
+      <div class="title-sigil">✦</div>
+      <h1>ARCANA&nbsp;ENGINE</h1>
+      <p class="title-tag">Your deck is alive. Your cards become reality.<br/>Survive inside the magical machine you built.</p>
+      <div class="title-rules">
+        <span><b>WASD</b> move</span><span><b>SPACE</b> dash</span>
+        <span><b>P</b> pause</span><span><b>M</b> mute</span>
+      </div>
+      <p class="title-hint">The engine draws, channels and resolves your cards on its own.<br/>
+      You control position. Lure enemies into the circles before they complete.</p>
+      <button id="start-btn">BEGIN THE RITUAL</button>
+    </div>
+  </div>
+
+  <!-- Reward draft -->
+  <div id="reward-overlay" class="overlay hidden">
+    <div class="reward-frame">
+      <div class="reward-sigil">☩</div>
+      <h2 id="reward-heading"></h2>
+      <div id="reward-cards"></div>
+      <button id="reward-skip">Decline — rest instead (+20 vitality)</button>
+    </div>
+  </div>
+
+  <!-- Death / victory -->
+  <div id="end-overlay" class="overlay hidden">
+    <div class="title-frame">
+      <h1 id="end-title"></h1>
+      <p id="end-sub" class="title-tag"></p>
+      <div id="end-stats"></div>
+      <button id="retry-btn">DRAW AGAIN</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

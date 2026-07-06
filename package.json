@@ -1,0 +1,9 @@
+{
+  "name": "arcana-engine",
+  "version": "0.1.0",
+  "description": "A real-time deckbuilding action roguelite prototype. Your deck is alive; your cards become reality.",
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 8123"
+  }
+}
