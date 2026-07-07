@@ -38,6 +38,14 @@ import {
   classChannelMult, gainOpportunity, gainRage, updatePlayer,
 } from './sim/player.js';
 import { updateBasicAttack } from './sim/basicAttack.js';
+import { updateSustains } from './sim/entities/sustains.js';
+import { updateTraps } from './sim/entities/traps.js';
+import { updateProjectiles } from './sim/entities/projectiles.js';
+import { updateZones } from './sim/entities/zones.js';
+import { updateTelegraphs } from './sim/entities/telegraphs.js';
+import { updateSummons } from './sim/entities/summons.js';
+import { updatePickups } from './sim/entities/pickups.js';
+import { updateCosmetics } from './sim/entities/cosmetics.js';
 import { sfx } from './audio.js';
 
 export { floater } from './sim/fx.js';
@@ -403,69 +411,6 @@ function runEnchantAction(game, doSpec, payload, ench) {
 }
 
 // ═══ sustained casts — the card keeps casting while active ═══
-function updateSustains(game, dt) {
-  for (const s of game.sustains) {
-    s.t += dt;
-    s.tickT -= dt;
-    if (s.tickT <= 0) {
-      s.tickT = s.tick;
-      const d = s.do;
-      if (d.chain) {
-        const start = nearestEnemy(game, game.player.x, game.player.y, undefined, d.chain.range + 120);
-        if (start) chainFrom(game, start, d.chain, s.ctx, game.player.x, game.player.y);
-      } else if (d.proj) {
-        const p = game.player;
-        const n = d.proj.count || 1;
-        const base = aimAngle(game) + (d.proj.ring ? s.t * 1.3 : 0); // rings slowly rotate wave to wave
-        for (let i = 0; i < n; i++) {
-          let a = d.proj.ring ? base + (i / n) * Math.PI * 2 : base + (game.rng.float() - 0.5) * (d.proj.spread || 0);
-          spawnPlayerProj(game, p.x, p.y, a, d.proj, s.ctx);
-        }
-        sfx('cast', s.def.element);
-      } else if (d.pulse) {
-        const p = game.player;
-        for (const e of enemiesIn(game, p.x, p.y, d.pulse.r)) {
-          hitEnemy(game, e, d.pulse.dmg, s.ctx, d.pulse, { quiet: true });
-          if (!e.dead && d.pulse.knockback) {
-            const a = Math.atan2(e.y - p.y, e.x - p.x);
-            e.kvx = Math.cos(a) * d.pulse.knockback; e.kvy = Math.sin(a) * d.pulse.knockback; e.kt = 0.15;
-          }
-        }
-        game.fx.push({ kind: 'arc', x: p.x, y: p.y, ang: s.t * 9, arc: Math.PI * 1.2, range: d.pulse.r, color: s.color, t: 0, life: 0.2 });
-        sfx('slash');
-      }
-    }
-  }
-  game.sustains = game.sustains.filter(s => s.t < s.dur);
-  game.engine.sustainedActive = game.sustains.length > 0;
-}
-
-// ═══ traps ═══
-function updateTraps(game, dt) {
-  for (const tr of game.traps) {
-    if (tr.armT > 0) { tr.armT -= dt; continue; }
-    tr.ttl -= dt;
-    if (tr.ttl <= 0) { tr.dead = true; continue; }
-    for (const e of game.enemies) {
-      if (!targetable(e)) continue;
-      if (Math.hypot(e.x - tr.x, e.y - tr.y) > tr.r * 0.55 + e.r) continue;
-      // sprung!
-      for (const o of enemiesIn(game, tr.x, tr.y, tr.r)) {
-        hitEnemy(game, o, tr.dmg, tr.ctx, { critChance: 0 });
-        if (o.dead) continue;
-        if (tr.root && !o.def.boss && !o.def.rival) o.root = Math.max(o.root || 0, tr.root);
-        if (tr.status) applyStatus(game, o, tr.status[0], tr.status[1]);
-      }
-      game.fx.push({ kind: 'blast', x: tr.x, y: tr.y, r: tr.r, color: tr.color, t: 0, life: 0.4 });
-      shake(game, 5); sfx('boom');
-      tr.dead = true;
-      game.bus.emit(EVT.trapTriggered, { x: tr.x, y: tr.y });
-      break;
-    }
-  }
-  game.traps = game.traps.filter(tr => !tr.dead);
-}
-
 // ═══ enemies ═══
 /** @returns {import('./data/types.js').EnemyState} */
 export function spawnEnemy(game, idOrDef, x, y, opts = {}) {
@@ -1452,147 +1397,3 @@ function updateStateLabel(game) {
   game.stateLabel = label;
 }
 
-function updateProjectiles(game, dt) {
-  const p = game.player;
-  // player projectiles
-  for (const pr of game.projectiles) {
-    pr.t += dt;
-    if (pr.boomerang) {
-      if (pr.phase === 0 && pr.t > 0.55) {
-        pr.phase = 1;
-        pr.hit.clear();
-      }
-      if (pr.phase === 1) {
-        const a = Math.atan2(p.y - pr.y, p.x - pr.x);
-        const sp = Math.hypot(pr.vx, pr.vy);
-        pr.vx = Math.cos(a) * sp; pr.vy = Math.sin(a) * sp;
-        if (Math.hypot(p.x - pr.x, p.y - pr.y) < 24) pr.dead = true;
-      }
-    }
-    pr.x += pr.vx * dt; pr.y += pr.vy * dt;
-    if (pr.t > pr.life || Math.hypot(pr.x - p.x, pr.y - p.y) > 1600) pr.dead = true;
-    if (pr.dead) continue;
-    if (pr.rehit) for (const [k, v] of pr.rehit) { const nv = v - dt; if (nv <= 0) pr.rehit.delete(k); else pr.rehit.set(k, nv); }
-    for (const e of game.enemies) {
-      if (!targetable(e)) continue;
-      if (Math.hypot(e.x - pr.x, e.y - pr.y) > e.r + pr.r) continue;
-      if (pr.rehit) {
-        if (pr.rehit.has(e.uid)) continue;
-        pr.rehit.set(e.uid, pr.eff.rehit);
-      } else {
-        if (pr.hit.has(e.uid)) continue;
-        pr.hit.add(e.uid);
-      }
-      hitEnemy(game, e, pr.dmg, pr.ctx, pr.eff);
-      spark(game, pr.x, pr.y, pr.color, 5, 120, 0.35);
-      if (pr.ctx.basic) gainRage(game, 2);
-      if (pr.eff.chainOnHit && !e.dead) chainFrom(game, e, pr.eff.chainOnHit, pr.ctx, pr.x, pr.y);
-      if (pr.eff.explode) {
-        const ex = pr.eff.explode;
-        for (const o of enemiesIn(game, pr.x, pr.y, ex.r)) if (o !== e && !o.dead) hitEnemy(game, o, ex.dmg, pr.ctx, pr.eff, { quiet: true });
-        game.fx.push({ kind: 'blast', x: pr.x, y: pr.y, r: ex.r, color: pr.color, t: 0, life: 0.4 });
-        shake(game, 3); sfx('boom');
-      }
-      if (!pr.rehit) {
-        if (pr.pierce > 0) pr.pierce--; else { pr.dead = true; break; }
-      }
-    }
-  }
-  game.projectiles = game.projectiles.filter(pr => !pr.dead);
-
-  // enemy projectiles
-  for (const pr of game.enemyProjectiles) {
-    pr.t += dt;
-    pr.x += pr.vx * dt; pr.y += pr.vy * dt;
-    if (pr.t > 4 || Math.hypot(pr.x - p.x, pr.y - p.y) > 1600) { pr.dead = true; continue; }
-    const d = Math.hypot(pr.x - p.x, pr.y - p.y);
-    if (d < pr.r + p.r + 4) {
-      if (p.iframes > 0 && p.dashT > 0 && !p.dodgeCredited) { p.dodgeCredited = true; game.bus.emit(EVT.perfectDodge, {}); }
-      else if (p.iframes <= 0 && p.untargetable <= 0) { damagePlayer(game, pr.dmg, pr.x, pr.y); pr.dead = true; }
-    }
-  }
-  game.enemyProjectiles = game.enemyProjectiles.filter(pr => !pr.dead);
-}
-
-function updateZones(game, dt) {
-  const p = game.player;
-  for (const z of game.zones) {
-    z.t += dt;
-    if (z.follow) { z.x = p.x; z.y = p.y; }
-    z.tickT -= dt;
-    if (z.tickT <= 0 && z.tickDmg > 0) {
-      z.tickT = z.tickRate;
-      for (const e of enemiesIn(game, z.x, z.y, z.r)) {
-        damageEnemy(game, e, z.tickDmg * (z.ctx ? z.ctx.dmgMult : 1), { color: z.color, quiet: true });
-        if (!e.dead && z.status) applyStatus(game, e, z.status[0], z.status[1]);
-      }
-    }
-  }
-  game.zones = game.zones.filter(z => z.t < z.duration);
-}
-
-function updateTelegraphs(game, dt) {
-  for (const tg of game.telegraphs) {
-    tg.t += dt;
-    if (tg.t >= tg.dur) { tg.done = true; if (tg.onDone) tg.onDone(game); }
-  }
-  game.telegraphs = game.telegraphs.filter(tg => !tg.done);
-}
-
-function updateSummons(game, dt) {
-  const p = game.player;
-  for (const s of game.summons) {
-    s.t += dt;
-    // hover near the player
-    const dx = p.x + 40 - s.x, dy = p.y - 20 - s.y;
-    s.x += dx * dt * 3; s.y += dy * dt * 3;
-    s.fireT -= dt;
-    if (s.fireT <= 0) {
-      const t = nearestEnemy(game, s.x, s.y);
-      if (t) {
-        s.fireT = s.fireRate;
-        const a = Math.atan2(t.y - s.y, t.x - s.x);
-        spawnPlayerProj(game, s.x, s.y, a, { dmg: s.dmg, speed: 700, radius: 5, critChance: 0.15, element: 'shadow', life: 1.6 }, s.ctx);
-        sfx('cast', 'shadow');
-      }
-    }
-  }
-  game.summons = game.summons.filter(s => s.t < s.dur);
-}
-
-function updatePickups(game, dt) {
-  const p = game.player;
-  for (const pk of game.pickups) {
-    pk.t += dt;
-    const d = Math.hypot(p.x - pk.x, p.y - pk.y);
-    if (d < 120) { // magnetism
-      const a = Math.atan2(p.y - pk.y, p.x - pk.x);
-      const pull = 420 * (1 - d / 130);
-      pk.vx += Math.cos(a) * pull * dt * 8; pk.vy += Math.sin(a) * pull * dt * 8;
-    }
-    pk.vx *= 1 - Math.min(1, dt * 4); pk.vy *= 1 - Math.min(1, dt * 4);
-    pk.x += pk.vx * dt; pk.y += pk.vy * dt;
-    if (d < p.r + 12) {
-      pk.dead = true;
-      if (pk.kind === 'shard') { game.engine.gainFlow(1, 'shard'); sfx('shard'); }
-      else if (pk.kind === 'gold') { game.gold += pk.value || 1; floater(game, p.x, p.y - 26, `+${pk.value || 1}◈`, '#ffd97a', 12); sfx('shard'); }
-      else { p.hp = Math.min(p.maxHp, p.hp + 10); floater(game, p.x, p.y - 26, '+10', '#7fe08a', 13); sfx('heal'); }
-    }
-    if (pk.t > 14) pk.dead = true;
-  }
-  game.pickups = game.pickups.filter(pk => !pk.dead);
-}
-
-function updateCosmetics(game, dt) {
-  for (const pt of game.particles) {
-    pt.t += dt;
-    if (pt.drag) { pt.vx *= 1 - Math.min(1, dt * pt.drag); pt.vy *= 1 - Math.min(1, dt * pt.drag); }
-    pt.x += pt.vx * dt; pt.y += pt.vy * dt;
-  }
-  game.particles = game.particles.filter(pt => pt.t < pt.life);
-  if (game.particles.length > 600) game.particles.splice(0, game.particles.length - 600);
-  for (const f of game.floaters) { f.t += dt; f.y -= 34 * dt; }
-  game.floaters = game.floaters.filter(f => f.t < f.life);
-  for (const fx of game.fx) fx.t += dt;
-  game.fx = game.fx.filter(fx => fx.t < fx.life);
-}
