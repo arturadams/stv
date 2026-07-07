@@ -1,19 +1,20 @@
-import { sfx } from '../../audio.js';
-import { STATUS_DEFS, damageEnemy, damagePlayer, enemiesIn, killEnemy } from '../combat.js';
-import { spawnEnemy } from '../entities/spawn.js';
-import { shake, spark } from '../fx.js';
+import { STATUS_DEFS, damageEnemy, damagePlayer } from '../combat.js';
 import { chunksNear, clampToRegion } from '../map/chunks.js';
 import type { EnemyState, EnemyStatusState, StatusName } from '../../data/types.js';
 import type { GameState } from '../types.js';
-import { updateBoss } from './boss.js';
-import { updateRivalDuel } from './rival.js';
+import { updateEnemyBehavior } from './registry.js';
+import type { BehaviorTickInfo } from './registry.js';
 
-// This module is deliberately still switch-based (see R2.6 in
-// REFACTOR_PLAN.md): each behavior branch below reads EnemyDef fields that
-// are optional on the type but always present for enemies using that
-// behavior (e.g. `range`/`fireRate` for 'ranged'). The `!` assertions below
-// encode that data convention; R3.2's typed behavior registry replaces it
-// with per-behavior config types instead.
+// registering every enemy behavior is a side effect of importing these
+// modules — this file is the one place that pulls them all in.
+import './chase.js';
+import './ranged.js';
+import './exploder.js';
+import './stalker.js';
+import './mortar.js';
+import './lunge.js';
+import './boss.js';
+import './rival.js';
 
 export function touchAttack(game: GameState, e: EnemyState, dist: number, dt: number): void {
   const p = game.player;
@@ -22,84 +23,6 @@ export function touchAttack(game: GameState, e: EnemyState, dist: number, dt: nu
     e.touchCd = 0.8;
     damagePlayer(game, e.def.dmg, e.x, e.y);
   }
-}
-
-export function updateLunger(
-  game: GameState,
-  e: EnemyState,
-  dt: number,
-  dist: number,
-  ux: number,
-  uy: number,
-  spd: number,
-  rooted: boolean,
-): void {
-  const p = game.player;
-  e.lungeCd -= dt;
-  if (e.state === 'telegraph') {
-    e.stateT -= dt;
-    if (e.stateT <= 0) {
-      e.state = 'lunging';
-      e.stateT = 0.35;
-      sfx('lunge');
-    }
-    return;
-  }
-  if (e.state === 'lunging') {
-    e.stateT -= dt;
-    const dir = e.lungeDir!;
-    e.x += dir.x * e.def.lungeSpeed! * dt;
-    e.y += dir.y * e.def.lungeSpeed! * dt;
-    if (dist < e.r + p.r + 6) damagePlayer(game, e.def.dmg, e.x, e.y);
-    if (e.stateT <= 0) {
-      // World II knights chain a second lunge before resting
-      if ((e.chainLeft || 0) > 0) {
-        e.chainLeft = (e.chainLeft || 0) - 1;
-        e.state = 'telegraph';
-        e.stateT = 0.35;
-        const d = Math.hypot(p.x - e.x, p.y - e.y) || 1;
-        e.lungeDir = { x: (p.x - e.x) / d, y: (p.y - e.y) / d };
-        sfx('tel');
-      } else {
-        e.state = 'active';
-        e.lungeCd = 2.2;
-      }
-    }
-    return;
-  }
-  // elite shockwave
-  if (e.def.waveEvery) {
-    e.waveCd -= dt;
-    if (e.waveCd <= 0 && dist < e.def.waveR! * 1.5) {
-      e.waveCd = e.def.waveEvery;
-      const ex = e.x;
-      const ey = e.y;
-      game.telegraphs.push({
-        shape: 'circle', x: ex, y: ey, r: e.def.waveR!, t: 0, dur: e.def.waveTel!, color: e.def.glow,
-        onDone: (g) => {
-          if (Math.hypot(g.player.x - ex, g.player.y - ey) < e.def.waveR! + g.player.r) damagePlayer(g, e.def.waveDmg!, ex, ey);
-          g.fx.push({ kind: 'blast', x: ex, y: ey, r: e.def.waveR!, color: e.def.glow, t: 0, life: 0.5 });
-          shake(g, 9);
-          sfx('boom');
-        },
-      });
-      sfx('fuse');
-    }
-  }
-  if (!rooted) {
-    if (dist < e.def.lungeRange! && e.lungeCd <= 0) {
-      e.state = 'telegraph';
-      e.stateT = e.def.lungeTel!;
-      e.chainLeft = e.def.lungeChain || 0;
-      const d = Math.hypot(p.x - e.x, p.y - e.y) || 1;
-      e.lungeDir = { x: (p.x - e.x) / d, y: (p.y - e.y) / d };
-      sfx('tel');
-    } else {
-      e.x += ux * spd * dt;
-      e.y += uy * spd * dt;
-    }
-  }
-  touchAttack(game, e, dist, dt);
 }
 
 export function updateEnemy(game: GameState, e: EnemyState, dt: number): void {
@@ -167,132 +90,10 @@ export function updateEnemy(game: GameState, e: EnemyState, dt: number): void {
   const ux = dx / dist;
   const uy = dy / dist;
 
-  const b = e.def.behavior;
-  if (b === 'chase') {
-    if (!rooted) {
-      e.x += (ux * spd + Math.cos(e.wobble) * 22) * dt;
-      e.y += (uy * spd + Math.sin(e.wobble * 1.3) * 22) * dt;
-    }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'ranged') {
-    if (!rooted) {
-      if (dist > e.def.range!) {
-        e.x += ux * spd * dt;
-        e.y += uy * spd * dt;
-      } else if (dist < e.def.range! * 0.6) {
-        e.x -= ux * spd * dt;
-        e.y -= uy * spd * dt;
-      } else {
-        e.x += -uy * spd * 0.6 * dt;
-        e.y += ux * spd * 0.6 * dt;
-      }
-    }
-    e.fireT -= dt;
-    if (e.fireT <= 0 && dist < e.def.range! * 1.25) {
-      e.fireT = e.def.fireRate!;
-      const a = Math.atan2(dy, dx);
-      game.enemyProjectiles.push({
-        x: e.x, y: e.y, vx: Math.cos(a) * e.def.projSpeed!, vy: Math.sin(a) * e.def.projSpeed!,
-        r: 7, dmg: e.def.dmg, color: e.def.glow, t: 0,
-      });
-      sfx('efire');
-    }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'exploder') {
-    if (e.state === 'fuse') {
-      e.stateT -= dt;
-      if (e.stateT <= 0) {
-        const r = e.def.boomR!;
-        if (Math.hypot(p.x - e.x, p.y - e.y) < r + p.r) damagePlayer(game, e.def.dmg, e.x, e.y);
-        for (const o of enemiesIn(game, e.x, e.y, r)) {
-          if (o !== e) damageEnemy(game, o, e.def.dmg * 0.5, { quiet: true });
-        }
-        game.fx.push({ kind: 'blast', x: e.x, y: e.y, r, color: e.def.glow, t: 0, life: 0.5 });
-        shake(game, 8);
-        sfx('boom');
-        killEnemy(game, e, {});
-      }
-      return;
-    }
-    if (!rooted) {
-      e.x += ux * spd * dt;
-      e.y += uy * spd * dt;
-    }
-    if (dist < 95) {
-      e.state = 'fuse';
-      e.stateT = e.def.fuse!;
-      game.telegraphs.push({
-        shape: 'circle', x: e.x, y: e.y, r: e.def.boomR!, t: 0, dur: e.def.fuse!, color: e.def.glow, decorative: true,
-      });
-      sfx('fuse');
-    }
-  } else if (b === 'stalker') {
-    // phase-shifts through ash, reappearing at the player's flank
-    e.stalkT = (e.stalkT ?? 3) - dt;
-    if (e.state === 'vanish') {
-      e.stateT -= dt;
-      if (e.stateT <= 0) {
-        const a = game.rng.range(0, Math.PI * 2);
-        e.x = p.x + Math.cos(a) * 170;
-        e.y = p.y + Math.sin(a) * 170;
-        e.state = 'active';
-        e.stalkT = game.rng.range(3.5, 5);
-        game.fx.push({ kind: 'spawn', x: e.x, y: e.y, r: e.r * 2, color: e.def.glow, t: 0, life: 0.5 });
-        sfx('blink');
-      }
-      return;
-    }
-    if (e.stalkT <= 0 && dist > 130) {
-      e.state = 'vanish';
-      e.stateT = 0.9;
-      spark(game, e.x, e.y, e.def.glow, 8, 120);
-      sfx('blink');
-    } else if (!rooted) {
-      e.x += ux * spd * dt;
-      e.y += uy * spd * dt;
-    }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'mortar') {
-    // artillery: lobs telegraphed magma at your feet; backs off if crowded
-    if (!rooted && dist < 180) {
-      e.x -= ux * spd * dt;
-      e.y -= uy * spd * dt;
-    }
-    e.fireT -= dt;
-    if (e.fireT <= 0 && dist < e.def.range!) {
-      e.fireT = e.def.fireRate!;
-      const tx = p.x + game.rng.range(-40, 40);
-      const ty = p.y + game.rng.range(-40, 40);
-      const def = e.def;
-      game.telegraphs.push({
-        shape: 'circle', x: tx, y: ty, r: def.mortarR!, t: 0, dur: def.mortarTel!, color: def.glow,
-        onDone: (g) => {
-          if (Math.hypot(g.player.x - tx, g.player.y - ty) < def.mortarR! + g.player.r) damagePlayer(g, def.dmg, tx, ty);
-          g.fx.push({ kind: 'blast', x: tx, y: ty, r: def.mortarR!, color: def.glow, t: 0, life: 0.5 });
-          sfx('boom');
-        },
-      });
-      sfx('tel');
-    }
-  } else if (b === 'lunge') {
-    // elites that call reinforcements
-    if (e.def.summonEvery) {
-      e.summonCd = (e.summonCd ?? e.def.summonEvery) - dt;
-      if (e.summonCd <= 0 && dist < 600) {
-        e.summonCd = e.def.summonEvery;
-        for (let i = 0; i < 2; i++) {
-          const a = game.rng.range(0, Math.PI * 2);
-          spawnEnemy(game, e.def.summonId || 'wisp', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60);
-        }
-        sfx('summon');
-      }
-    }
-    updateLunger(game, e, dt, dist, ux, uy, spd, rooted);
-  } else if (b === 'boss') {
-    updateBoss(game, e, dt, dist, ux, uy, spd);
-  } else if (b === 'rival') {
-    updateRivalDuel(game, e, dt, dist, ux, uy, spd, rooted);
-  }
+  const tick: BehaviorTickInfo = { dist, ux, uy, spd, rooted, p };
+  updateEnemyBehavior(game, e, dt, tick);
+  if (e.dead) return;
+
   clampToRegion(game, e);
   // sanctuary wards: enemies cannot enter the rest circle
   for (const ch of chunksNear(game, e.x, e.y, 1)) {

@@ -77,17 +77,7 @@ const enemy = {
   mark: null,
   wobble: 1.2,
   dead: false,
-  fireT: 1.4,
-  lungeCd: 1.5,
-  waveCd: 0,
-  bossPhase: 1,
-  bossAttackT: 2.2,
-  bossAttackIdx: 0,
-  attackT: 1.2,
-  castT: 6.5,
-  casting: null,
-  strafeT: 0,
-  strafeDir: 1,
+  ai: { fireT: 1.4 },
 } satisfies EnemyState;
 
 const mage = {
@@ -230,7 +220,7 @@ describe('enemy and world domain types', () => {
   });
 
   it('models runtime world entities and boss scripts', () => {
-    expect(enemy.fireT).toBe(1.4);
+    expect(enemy.ai).toEqual({ fireT: 1.4 });
     expect(script.phases[0].attacks).toHaveLength(4);
     expect(chunk.sanctuary).toBe(sanctuary);
     expect(rival.cls).toBe('rogue');

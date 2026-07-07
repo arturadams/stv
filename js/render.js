@@ -542,7 +542,7 @@ function drawEnemy(ctx, e, t) {
   ctx.restore();
 
   // the rival's featured cards hover above it — its build identity
-  if (e.def.rival && e.featured) drawFeaturedRow(ctx, e.x, e.y - e.r - 44, e.featured, t, e.casting);
+  if (e.def.rival && e.featured) drawFeaturedRow(ctx, e.x, e.y - e.r - 44, e.featured, t, e.ai?.casting);
 }
 
 function drawWisp(ctx, e, t) {
@@ -571,7 +571,7 @@ function drawSentinel(ctx, e, t) {
   ctx.strokeStyle = 'rgba(143,216,255,0.6)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(0, 0, e.r * 0.72, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
-  const charging = e.fireT < 0.5;
+  const charging = e.ai?.fireT < 0.5;
   ctx.fillStyle = charging ? '#d8f2ff' : '#8fd8ff';
   ctx.font = `${e.r * 0.9}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('☉', 0, 1);
@@ -610,7 +610,7 @@ function drawKnight(ctx, e, t) {
   if (tel) {
     ctx.strokeStyle = 'rgba(194,59,74,0.6)'; ctx.lineWidth = 4; ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(0, 0);
-    ctx.lineTo(e.lungeDir.x * e.def.lungeSpeed * 0.38, e.lungeDir.y * e.def.lungeSpeed * 0.38);
+    ctx.lineTo(e.ai?.dir?.x * e.def.lungeSpeed * 0.38, e.ai?.dir?.y * e.def.lungeSpeed * 0.38);
     ctx.stroke(); ctx.setLineDash([]);
   }
   const sh = tel ? Math.sin(t * 40) * 1.5 : 0;
@@ -658,7 +658,7 @@ function drawBook(ctx, e, t) {
 }
 
 function drawLibrarian(ctx, e, t) {
-  const ph2 = e.bossPhase === 2;
+  const ph2 = e.ai?.phase === 2;
   glow(ctx, 0, 0, e.r * 3.2, ph2 ? 'rgba(255,217,122,0.2)' : 'rgba(143,111,255,0.16)');
   const hover = Math.sin(t * 1.6) * 5;
   ctx.save(); ctx.translate(0, hover);
@@ -715,7 +715,7 @@ function drawStalker(ctx, e, t) {
 
 // World II: the magma maw — a squat obelisk with a molten mouth
 function drawMortar(ctx, e, t) {
-  const charging = e.fireT < 0.6;
+  const charging = e.ai?.fireT < 0.6;
   glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, charging ? 0.25 : 0.12));
   ctx.fillStyle = '#0d0806';
   ctx.beginPath(); ctx.ellipse(0, e.r * 0.5, e.r * 1.15, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
@@ -734,11 +734,12 @@ function drawMortar(ctx, e, t) {
 // a hooded binder silhouette — used for the dueling rival (world-entity version)
 function drawRivalDuelist(ctx, e, t) {
   const glowC = e.def.glow;
+  const casting = e.ai?.casting;
   glow(ctx, 0, 0, 46, hexA(glowC, 0.16));
-  drawBinderShape(ctx, t, glowC, e.casting ? 0.9 : 0.75);
-  if (e.casting) {
+  drawBinderShape(ctx, t, glowC, casting ? 0.9 : 0.75);
+  if (casting) {
     // visible casting: the card floats above, growing brighter
-    const k = e.casting.t / e.casting.dur;
+    const k = casting.t / casting.dur;
     glow(ctx, 0, -34, 26 + k * 16, hexA(glowC, 0.2 + k * 0.3));
   }
 }
