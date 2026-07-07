@@ -538,6 +538,12 @@ export type EnemyMode =
   | 'telegraph'
   | 'lunging';
 
+export interface CastingState {
+  def: CardDef | null;
+  t: number;
+  dur: number;
+}
+
 export interface EnemyState {
   uid: number;
   def: EnemyDef;
@@ -564,6 +570,28 @@ export interface EnemyState {
   featured?: CardDef[] | null;
   cls?: ClassId | null;
   ai?: unknown;
+
+  // Behavior scratch state — every field below is mutated directly by the
+  // still-switch-based sim/ai/* modules (see R2.6). R3.2's typed behavior
+  // registry narrows these into per-behavior state reached through `ai`
+  // instead; until then they live flat on EnemyState, matching what
+  // spawnEnemy actually initializes at runtime.
+  fireT: number;
+  lungeCd: number;
+  waveCd: number;
+  bossPhase: number;
+  bossAttackT: number;
+  bossAttackIdx: number;
+  attackT: number;
+  castT: number;
+  casting: CastingState | null;
+  strafeT: number;
+  strafeDir: number;
+  // set on demand by specific behaviors, not initialized at spawn:
+  stalkT?: number;
+  summonCd?: number;
+  lungeDir?: { x: number; y: number };
+  chainLeft?: number;
 }
 
 interface BasicAttack {

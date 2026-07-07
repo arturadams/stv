@@ -14,15 +14,12 @@ import { distToSegment, wrapAngle } from './core/math.js';
 import { makeRng } from './core/rng.js';
 import { floater, mote, ringFx, shake, spark } from './sim/fx.js';
 import {
-  STATUS_DEFS,
   aimAngle,
   applyStatus as applyStatusImpl,
   chainFrom,
   damageEnemy as damageEnemyImpl,
-  damagePlayer,
   enemiesIn,
   hitEnemy,
-  killEnemy,
   nearestEnemy,
   spawnPlayerProj,
   targetable,
@@ -46,7 +43,13 @@ import { updateTelegraphs } from './sim/entities/telegraphs.js';
 import { updateSummons } from './sim/entities/summons.js';
 import { updatePickups } from './sim/entities/pickups.js';
 import { updateCosmetics } from './sim/entities/cosmetics.js';
+import { spawnEnemy as spawnEnemyImpl, spawnPointNear } from './sim/entities/spawn.js';
+import { updateEnemy } from './sim/ai/index.js';
+import { updateAlly } from './sim/ai/ally.js';
+import { updateAmbientSpawns } from './sim/run/spawning.js';
 import { sfx } from './audio.js';
+
+export function spawnEnemy(...args) { return spawnEnemyImpl(...args); }
 
 export { floater } from './sim/fx.js';
 export { CHUNK, biomeOf, getChunk, worldDef };
@@ -154,6 +157,7 @@ export function createGame(opts = {}) {
   return game;
 }
 
+/** @param {{ element?: string, school?: string }} def @returns {string} */
 export function colorOf(def) { return ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school]; }
 
 // ═══ channel preview ═══
@@ -408,399 +412,6 @@ function runEnchantAction(game, doSpec, payload, ench) {
     game.fx.push({ kind: 'blast', x: payload.enemy.x, y: payload.enemy.y, r: s.r, color: ELEMENT_COLORS.poison, t: 0, life: 0.4 });
   }
   if (ench && !ench.relic) spark(game, p.x, p.y, ench.color, 4, 80);
-}
-
-// ═══ sustained casts — the card keeps casting while active ═══
-// ═══ enemies ═══
-/** @returns {import('./data/types.js').EnemyState} */
-export function spawnEnemy(game, idOrDef, x, y, opts = {}) {
-  const def = typeof idOrDef === 'string' ? ENEMIES[idOrDef] : idOrDef;
-  const hp = Math.round(def.hp * (opts.hpMult || 1));
-  const e = {
-    uid: game.enemyIds.next(), def, x, y, hp, maxHp: hp, r: def.radius,
-    statuses: {}, state: 'spawn', stateT: 0.7, hitFlash: 0, freeze: 0, stun: 0, root: 0,
-    kvx: 0, kvy: 0, kt: 0, touchCd: 0, fireT: 1 + game.rng.float(), mark: null,
-    wobble: game.rng.range(0, Math.PI * 2), lungeCd: 1.5, waveCd: def.waveEvery || 0,
-    bossPhase: 1, bossAttackT: 2.2, bossAttackIdx: 0, dead: false,
-    campRef: opts.campRef || null,
-    // rival-only fields
-    featured: opts.featured || null, cls: opts.cls || null,
-    attackT: 1.2, castT: 5 + game.rng.float() * 3, casting: null, strafeT: 0, strafeDir: 1,
-  };
-  game.enemies.push(e);
-  game.fx.push({ kind: 'spawn', x, y, r: def.radius * 2, color: def.glow, t: 0, life: 0.7 });
-  return e;
-}
-
-function spawnPointNear(game, minR = 620, maxR = 800) {
-  const p = game.player;
-  const a = game.rng.range(0, Math.PI * 2);
-  const d = game.rng.range(minR, maxR);
-  return { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
-}
-
-function updateEnemy(game, e, dt) {
-  const p = game.player;
-  e.wobble += dt * 4;
-  if (e.hitFlash > 0) e.hitFlash -= dt;
-  if (e.kt > 0) { e.x += e.kvx * dt; e.y += e.kvy * dt; e.kt -= dt; }
-  if (e.mark) { e.mark.t -= dt; if (e.mark.t <= 0) e.mark = null; }
-
-  if (e.state === 'spawn') { e.stateT -= dt; if (e.stateT <= 0) e.state = 'active'; return; }
-
-  // status ticks
-  let slowFactor = 1;
-  for (const [name, st] of Object.entries(e.statuses)) {
-    const sd = STATUS_DEFS[name];
-    st.t -= dt;
-    if (sd.dps > 0) {
-      st.acc = (st.acc || 0) + sd.dps * st.stacks * dt;
-      if (st.acc >= 1) {
-        const whole = Math.floor(st.acc); st.acc -= whole;
-        damageEnemy(game, e, whole, { color: sd.color, quiet: true, dot: true });
-        if (e.dead) return;
-      }
-    }
-    if (name === 'chill') slowFactor *= 0.5;
-    if (st.t <= 0) delete e.statuses[name];
-  }
-  if (e.freeze > 0) { e.freeze -= dt; return; }
-  if (e.stun > 0) { e.stun -= dt; return; }
-  const rooted = e.root > 0; if (rooted) e.root -= dt;
-
-  for (const ch of chunksNear(game, e.x, e.y, 1))
-    for (const pool of ch.pools)
-      if (Math.hypot(e.x - pool.x, e.y - pool.y) < pool.r) slowFactor *= 0.7;
-  for (const z of game.zones)
-    if (z.slow && Math.hypot(e.x - z.x, e.y - z.y) < z.r) slowFactor *= z.slow;
-
-  const spd = e.def.speed * slowFactor;
-  const dx = p.x - e.x, dy = p.y - e.y, dist = Math.hypot(dx, dy) || 1;
-  const ux = dx / dist, uy = dy / dist;
-
-  const b = e.def.behavior;
-  if (b === 'chase') {
-    if (!rooted) {
-      e.x += (ux * spd + Math.cos(e.wobble) * 22) * dt;
-      e.y += (uy * spd + Math.sin(e.wobble * 1.3) * 22) * dt;
-    }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'ranged') {
-    if (!rooted) {
-      if (dist > e.def.range) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
-      else if (dist < e.def.range * 0.6) { e.x -= ux * spd * dt; e.y -= uy * spd * dt; }
-      else { e.x += -uy * spd * 0.6 * dt; e.y += ux * spd * 0.6 * dt; }
-    }
-    e.fireT -= dt;
-    if (e.fireT <= 0 && dist < e.def.range * 1.25) {
-      e.fireT = e.def.fireRate;
-      const a = Math.atan2(dy, dx);
-      game.enemyProjectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * e.def.projSpeed, vy: Math.sin(a) * e.def.projSpeed, r: 7, dmg: e.def.dmg, color: e.def.glow, t: 0 });
-      sfx('efire');
-    }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'exploder') {
-    if (e.state === 'fuse') {
-      e.stateT -= dt;
-      if (e.stateT <= 0) {
-        const r = e.def.boomR;
-        if (Math.hypot(p.x - e.x, p.y - e.y) < r + p.r) damagePlayer(game, e.def.dmg, e.x, e.y);
-        for (const o of enemiesIn(game, e.x, e.y, r)) if (o !== e) damageEnemy(game, o, e.def.dmg * 0.5, { quiet: true });
-        game.fx.push({ kind: 'blast', x: e.x, y: e.y, r, color: e.def.glow, t: 0, life: 0.5 });
-        shake(game, 8); sfx('boom');
-        killEnemy(game, e, {});
-      }
-      return;
-    }
-    if (!rooted) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
-    if (dist < 95) {
-      e.state = 'fuse'; e.stateT = e.def.fuse;
-      game.telegraphs.push({ shape: 'circle', x: e.x, y: e.y, r: e.def.boomR, t: 0, dur: e.def.fuse, color: e.def.glow, decorative: true });
-      sfx('fuse');
-    }
-  } else if (b === 'stalker') {
-    // phase-shifts through ash, reappearing at the player's flank
-    e.stalkT = (e.stalkT ?? 3) - dt;
-    if (e.state === 'vanish') {
-      e.stateT -= dt;
-      if (e.stateT <= 0) {
-        const a = game.rng.range(0, Math.PI * 2);
-        e.x = p.x + Math.cos(a) * 170; e.y = p.y + Math.sin(a) * 170;
-        e.state = 'active'; e.stalkT = game.rng.range(3.5, 5);
-        game.fx.push({ kind: 'spawn', x: e.x, y: e.y, r: e.r * 2, color: e.def.glow, t: 0, life: 0.5 });
-        sfx('blink');
-      }
-      return;
-    }
-    if (e.stalkT <= 0 && dist > 130) {
-      e.state = 'vanish'; e.stateT = 0.9;
-      spark(game, e.x, e.y, e.def.glow, 8, 120);
-      sfx('blink');
-    } else if (!rooted) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
-    touchAttack(game, e, dist, dt);
-  } else if (b === 'mortar') {
-    // artillery: lobs telegraphed magma at your feet; backs off if crowded
-    if (!rooted && dist < 180) { e.x -= ux * spd * dt; e.y -= uy * spd * dt; }
-    e.fireT -= dt;
-    if (e.fireT <= 0 && dist < e.def.range) {
-      e.fireT = e.def.fireRate;
-      const tx = p.x + game.rng.range(-40, 40), ty = p.y + game.rng.range(-40, 40);
-      const def = e.def;
-      game.telegraphs.push({
-        shape: 'circle', x: tx, y: ty, r: def.mortarR, t: 0, dur: def.mortarTel, color: def.glow,
-        onDone: (g) => {
-          if (Math.hypot(g.player.x - tx, g.player.y - ty) < def.mortarR + g.player.r) damagePlayer(g, def.dmg, tx, ty);
-          g.fx.push({ kind: 'blast', x: tx, y: ty, r: def.mortarR, color: def.glow, t: 0, life: 0.5 });
-          sfx('boom');
-        },
-      });
-      sfx('tel');
-    }
-  } else if (b === 'lunge') {
-    // elites that call reinforcements
-    if (e.def.summonEvery) {
-      e.summonCd = (e.summonCd ?? e.def.summonEvery) - dt;
-      if (e.summonCd <= 0 && dist < 600) {
-        e.summonCd = e.def.summonEvery;
-        for (let i = 0; i < 2; i++) {
-          const a = game.rng.range(0, Math.PI * 2);
-          spawnEnemy(game, e.def.summonId || 'wisp', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60);
-        }
-        sfx('summon');
-      }
-    }
-    updateLunger(game, e, dt, dist, ux, uy, spd, rooted);
-  } else if (b === 'boss') {
-    updateBoss(game, e, dt, dist, ux, uy, spd);
-  } else if (b === 'rival') {
-    updateRivalDuel(game, e, dt, dist, ux, uy, spd, rooted);
-  }
-  clampToRegion(game, e);
-  // sanctuary wards: enemies cannot enter the rest circle
-  for (const ch of chunksNear(game, e.x, e.y, 1)) {
-    if (!ch.sanctuary) continue;
-    const s = ch.sanctuary;
-    const d = Math.hypot(e.x - s.x, e.y - s.y);
-    if (d < s.r + e.r) {
-      const a = Math.atan2(e.y - s.y, e.x - s.x);
-      e.x = s.x + Math.cos(a) * (s.r + e.r);
-      e.y = s.y + Math.sin(a) * (s.r + e.r);
-    }
-  }
-}
-
-function touchAttack(game, e, dist, dt) {
-  const p = game.player;
-  e.touchCd -= dt;
-  if (dist < e.r + p.r + 2 && e.touchCd <= 0) {
-    e.touchCd = 0.8;
-    damagePlayer(game, e.def.dmg, e.x, e.y);
-  }
-}
-
-function updateLunger(game, e, dt, dist, ux, uy, spd, rooted) {
-  const p = game.player;
-  e.lungeCd -= dt;
-  if (e.state === 'telegraph') {
-    e.stateT -= dt;
-    if (e.stateT <= 0) { e.state = 'lunging'; e.stateT = 0.35; sfx('lunge'); }
-    return;
-  }
-  if (e.state === 'lunging') {
-    e.stateT -= dt;
-    e.x += e.lungeDir.x * e.def.lungeSpeed * dt;
-    e.y += e.lungeDir.y * e.def.lungeSpeed * dt;
-    if (dist < e.r + p.r + 6) damagePlayer(game, e.def.dmg, e.x, e.y);
-    if (e.stateT <= 0) {
-      // World II knights chain a second lunge before resting
-      if ((e.chainLeft || 0) > 0) {
-        e.chainLeft--;
-        e.state = 'telegraph'; e.stateT = 0.35;
-        const d = Math.hypot(p.x - e.x, p.y - e.y) || 1;
-        e.lungeDir = { x: (p.x - e.x) / d, y: (p.y - e.y) / d };
-        sfx('tel');
-      } else { e.state = 'active'; e.lungeCd = 2.2; }
-    }
-    return;
-  }
-  // elite shockwave
-  if (e.def.waveEvery) {
-    e.waveCd -= dt;
-    if (e.waveCd <= 0 && dist < e.def.waveR * 1.5) {
-      e.waveCd = e.def.waveEvery;
-      const ex = e.x, ey = e.y;
-      game.telegraphs.push({
-        shape: 'circle', x: ex, y: ey, r: e.def.waveR, t: 0, dur: e.def.waveTel, color: e.def.glow,
-        onDone: (g) => {
-          if (Math.hypot(g.player.x - ex, g.player.y - ey) < e.def.waveR + g.player.r) damagePlayer(g, e.def.waveDmg, ex, ey);
-          g.fx.push({ kind: 'blast', x: ex, y: ey, r: e.def.waveR, color: e.def.glow, t: 0, life: 0.5 });
-          shake(g, 9); sfx('boom');
-        },
-      });
-      sfx('fuse');
-    }
-  }
-  if (!rooted) {
-    if (dist < e.def.lungeRange && e.lungeCd <= 0) {
-      e.state = 'telegraph'; e.stateT = e.def.lungeTel;
-      e.chainLeft = e.def.lungeChain || 0;
-      const d = Math.hypot(p.x - e.x, p.y - e.y) || 1;
-      e.lungeDir = { x: (p.x - e.x) / d, y: (p.y - e.y) / d };
-      sfx('tel');
-    } else {
-      e.x += ux * spd * dt; e.y += uy * spd * dt;
-    }
-  }
-  touchAttack(game, e, dist, dt);
-}
-
-// ═══ rival duel AI — readable, telegraphed, no one-shot chaos ═══
-function updateRivalDuel(game, e, dt, dist, ux, uy, spd, rooted) {
-  const p = game.player;
-  const cls = e.cls || 'mage';
-  const band = cls === 'warrior' ? [120, 220] : cls === 'rogue' ? [200, 320] : [260, 400];
-
-  // movement: hold the distance band, strafe
-  e.strafeT -= dt;
-  if (e.strafeT <= 0) { e.strafeT = game.rng.range(1, 2.2); e.strafeDir = game.rng.chance(0.5) ? -1 : 1; }
-  if (!rooted && !e.casting) {
-    if (dist > band[1]) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
-    else if (dist < band[0]) { e.x -= ux * spd * 0.9 * dt; e.y -= uy * spd * 0.9 * dt; }
-    e.x += -uy * spd * 0.55 * e.strafeDir * dt;
-    e.y += ux * spd * 0.55 * e.strafeDir * dt;
-  }
-
-  // featured-card cast: a big visible channel with a telegraph
-  e.castT -= dt;
-  if (e.casting) {
-    e.casting.t += dt;
-    if (e.casting.t >= e.casting.dur) e.casting = null;
-  } else if (e.castT <= 0) {
-    e.castT = game.rng.range(6.5, 9);
-    const spells = (e.featured || []).filter(d => d.cat === 'Spell' || d.cat === 'Power');
-    const card = spells.length ? game.rng.pick(spells) : null;
-    const castDur = 1.8;
-    e.casting = { def: card, t: 0, dur: castDur };
-    const tx = p.x, ty = p.y;
-    const color = card ? colorOf(card) : e.def.glow;
-    game.telegraphs.push({
-      shape: 'circle', x: tx, y: ty, r: 135, t: 0, dur: castDur, color,
-      onDone: (g) => {
-        if (Math.hypot(g.player.x - tx, g.player.y - ty) < 135 + g.player.r) damagePlayer(g, 20, tx, ty);
-        g.fx.push({ kind: 'blast', x: tx, y: ty, r: 135, color, t: 0, life: 0.5 });
-        shake(g, 8); sfx('boom');
-      },
-    });
-    sfx('tel');
-    return;
-  }
-
-  // basic attacks per class — readable projectile speeds
-  e.attackT -= dt;
-  if (e.attackT <= 0 && !e.casting) {
-    if (cls === 'warrior') {
-      if (dist < 170) {
-        e.attackT = 1.5;
-        const ex = e.x, ey = e.y, ang = Math.atan2(p.y - ey, p.x - ex);
-        game.telegraphs.push({
-          shape: 'circle', x: ex + Math.cos(ang) * 90, y: ey + Math.sin(ang) * 90, r: 90, t: 0, dur: 0.55, color: e.def.glow,
-          onDone: (g) => {
-            const hx = ex + Math.cos(ang) * 90, hy = ey + Math.sin(ang) * 90;
-            if (Math.hypot(g.player.x - hx, g.player.y - hy) < 90 + g.player.r) damagePlayer(g, 14, hx, hy);
-            g.fx.push({ kind: 'arc', x: ex, y: ey, ang, arc: 1.6, range: 150, color: e.def.glow, t: 0, life: 0.25 });
-            sfx('slash');
-          },
-        });
-      } else e.attackT = 0.4;
-    } else {
-      e.attackT = cls === 'rogue' ? 1.0 : 1.4;
-      const a = Math.atan2(p.y - e.y, p.x - e.x);
-      const speed = cls === 'rogue' ? 420 : 310;
-      game.enemyProjectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: cls === 'rogue' ? 6 : 9, dmg: cls === 'rogue' ? 8 : 11, color: e.def.glow, t: 0 });
-      sfx('efire');
-    }
-  }
-  touchAttack(game, e, dist, dt);
-}
-
-// ═══ boss: The Gilded Librarian (boss gates + fallback guardian fights) ═══
-function updateBoss(game, e, dt, dist, ux, uy, spd) {
-  const p = game.player;
-  if (e.bossPhase === 1 && e.hp < e.maxHp * 0.5) {
-    e.bossPhase = 2;
-    game.banner = { title: 'THE ARCHIVE AWAKENS', sub: 'The Librarian misfires reality itself', t: 2.2 };
-    shake(game, 14); sfx('bossphase');
-  }
-  // drift: hold mid range
-  if (dist > 380) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
-  else if (dist < 220) { e.x -= ux * spd * dt; e.y -= uy * spd * dt; }
-
-  touchAttack(game, e, dist, dt);
-  e.bossAttackT -= dt * (e.bossPhase === 2 ? 1.35 : 1);
-  if (e.bossAttackT > 0) return;
-  e.bossAttackT = e.bossPhase === 2 ? 3.4 : 4.2;
-  const attacks = ['books', 'pages', 'runes', 'theft'];
-  const atk = attacks[e.bossAttackIdx % attacks.length];
-  e.bossAttackIdx++;
-
-  if (atk === 'books') {
-    const n = e.bossPhase === 2 ? 4 : 3;
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      spawnEnemy(game, e.def.minion || 'book', e.x + Math.cos(a) * 70, e.y + Math.sin(a) * 70);
-    }
-    sfx('summon');
-  } else if (atk === 'pages') {
-    for (let i = 0; i < 3; i++) {
-      const x = p.x + (i - 1) * 190 + game.rng.range(-40, 40);
-      const y = p.y;
-      game.telegraphs.push({
-        shape: 'rect', x, y, w: 130, h: 460, t: 0, dur: 1.15 + i * 0.18, color: '#ffd97a',
-        onDone: (g) => {
-          if (Math.abs(g.player.x - x) < 65 + g.player.r && Math.abs(g.player.y - y) < 230 + g.player.r) damagePlayer(g, 20, x, y);
-          g.fx.push({ kind: 'rectblast', x, y, w: 130, h: 460, color: '#ffd97a', t: 0, life: 0.4 });
-          shake(g, 8); sfx('slam');
-        },
-      });
-    }
-    sfx('tel');
-  } else if (atk === 'runes') {
-    const n = e.bossPhase === 2 ? 4 : 3;
-    for (let i = 0; i < n; i++) {
-      const ang = game.rng.range(0, Math.PI * 2), d = game.rng.float() * 160;
-      const x = p.x + Math.cos(ang) * d, y = p.y + Math.sin(ang) * d;
-      game.telegraphs.push({
-        shape: 'circle', x, y, r: 130, t: 0, dur: 1.3 + i * 0.15, color: '#c23b4a',
-        onDone: (g) => {
-          if (Math.hypot(g.player.x - x, g.player.y - y) < 130 + g.player.r) damagePlayer(g, 18, x, y);
-          g.fx.push({ kind: 'blast', x, y, r: 130, color: '#c23b4a', t: 0, life: 0.5 });
-          sfx('boom');
-        },
-      });
-    }
-    sfx('tel');
-  } else if (atk === 'theft') {
-    const q = game.engine.queue;
-    if (q.length > 0 && !game.stolen) {
-      const inst = q.shift();
-      game.stolen = { inst, t: 6 };
-      game.engine.uiDirty = true;
-      game.banner = { title: 'CARD STOLEN', sub: `The Librarian takes “${inst.def.name}”`, t: 1.8 };
-      game.fx.push({ kind: 'bolt', x1: p.x, y1: p.y, x2: e.x, y2: e.y, color: '#ffd97a', t: 0, life: 0.4 });
-      sfx('theft');
-    }
-  }
-  // phase 2 misfires: stray rune circles anywhere near the player
-  if (e.bossPhase === 2 && game.rng.chance(0.6)) {
-    const x = p.x + (game.rng.float() * 700 - 350), y = p.y + (game.rng.float() * 700 - 350);
-    game.telegraphs.push({
-      shape: 'circle', x, y, r: 100, t: 0, dur: 1.6, color: '#8f6fff',
-      onDone: (g) => {
-        if (Math.hypot(g.player.x - x, g.player.y - y) < 100 + g.player.r) damagePlayer(g, 12, x, y);
-        g.fx.push({ kind: 'blast', x, y, r: 100, color: '#8f6fff', t: 0, life: 0.4 });
-      },
-    });
-  }
 }
 
 // ═══ run lifecycle ═══
@@ -1086,38 +697,6 @@ export function leaveSanctuary(game) {
   sfx('wave');
 }
 
-// ═══ ambient enemy pressure ═══
-function updateAmbientSpawns(game, dt) {
-  if (game.zoneRegion || game.encounterPause || game.mm.state === 'choice') return;
-  // resting players are left alone
-  for (const ch of chunksNear(game, game.player.x, game.player.y, 1))
-    if (ch.sanctuary && Math.hypot(game.player.x - ch.sanctuary.x, game.player.y - ch.sanctuary.y) < ch.sanctuary.r) return;
-  const threat = threatOf(game);
-  let budget = Math.min(4 + threat * 1.6, 16);
-  if (game.ally) budget *= 1.7; // party pressure
-  const ambient = game.enemies.filter(e => !e.campRef && !e.def.boss && !e.def.rival).length;
-  game.spawnT -= dt;
-  if (game.spawnT <= 0 && ambient < budget) {
-    game.spawnT = game.rng.range(1, 2.6);
-    const tiers = worldDef(game).tiers;
-    const pool = tiers.filter(tier => threat >= tier.minThreat);
-    let total = 0; for (const tier of pool) total += tier.w;
-    let roll = game.rng.float() * total;
-    let pick = pool[0];
-    for (const tier of pool) { roll -= tier.w; if (roll <= 0) { pick = tier; break; } }
-    const pt = spawnPointNear(game);
-    const hpMult = (1 + (threat - 1) * 0.12) * (game.ally ? 1.25 : 1);
-    const n = pick.id === tiers[0].id ? 2 + game.rng.int(2) : 1;
-    for (let i = 0; i < n; i++)
-      spawnEnemy(game, pick.id, pt.x + game.rng.range(-40, 40), pt.y + game.rng.range(-40, 40), { hpMult });
-  }
-  // cull enemies that fell too far behind (the world is infinite)
-  for (const e of game.enemies) {
-    if (!e.campRef && !e.def.boss && !e.def.rival &&
-        Math.hypot(e.x - game.player.x, e.y - game.player.y) > 1700) e.dead = true;
-  }
-}
-
 // ═══ matchmaking — rival soul encounters ═══
 function makeRivalSoul(game) {
   const classIds = Object.keys(CLASSES);
@@ -1252,52 +831,6 @@ function startParty(game) {
   sfx('victory');
 }
 
-function updateAlly(game, dt) {
-  const al = game.ally;
-  if (!al) return;
-  const p = game.player;
-  al.t += dt; al.wob += dt * 3;
-  if (al.t >= al.dur) {
-    game.banner = { title: 'THE SOULS PART WAYS', sub: `${al.name} fades back into the realm`, t: 2.6 };
-    game.ally = null;
-    game.mm = { state: 'idle', nextT: game.rng.range(80, 120), searchT: 0, timeout: 9 };
-    sfx('theft');
-    return;
-  }
-  // follow at the player's shoulder
-  const tx = p.x + Math.cos(al.wob * 0.3) * 70, ty = p.y + Math.sin(al.wob * 0.3) * 70;
-  al.x += (tx - al.x) * Math.min(1, dt * 2.6);
-  al.y += (ty - al.y) * Math.min(1, dt * 2.6);
-  // basic attacks at the nearest enemy
-  al.attackT -= dt;
-  const target = nearestEnemy(game, al.x, al.y, undefined, 460);
-  if (al.attackT <= 0 && target) {
-    al.attackT = al.cls === 'rogue' ? 0.45 : al.cls === 'warrior' ? 0.8 : 0.6;
-    const a = Math.atan2(target.y - al.y, target.x - al.x);
-    const ctx = { def: { element: al.cls === 'mage' ? 'arcane' : 'physical' }, buffs: {}, dmgMult: 1 };
-    spawnPlayerProj(game, al.x, al.y, a, { dmg: 6, speed: 640, radius: 4, critChance: 0.1, element: ctx.def.element, life: 1.4 }, ctx);
-    sfx('cast', ctx.def.element);
-  }
-  // featured cast: a friendly AoE on a cluster, telegraphed
-  al.castT -= dt;
-  if (al.castT <= 0 && target) {
-    al.castT = game.rng.range(8, 11);
-    const tx2 = target.x, ty2 = target.y;
-    const card = al.featured.find(c => c.cat === 'Spell') || al.featured[0];
-    const color = card ? colorOf(card) : al.color;
-    al.casting = { def: card, t: 0, dur: 1.4 };
-    game.telegraphs.push({
-      shape: 'circle', x: tx2, y: ty2, r: 120, t: 0, dur: 1.4, color, friendly: true,
-      onDone: (g) => {
-        for (const e of enemiesIn(g, tx2, ty2, 120)) damageEnemy(g, e, 18, { color });
-        g.fx.push({ kind: 'blast', x: tx2, y: ty2, r: 120, color, t: 0, life: 0.5 });
-        sfx('boom');
-      },
-    });
-    sfx('tel');
-  }
-  if (al.casting) { al.casting.t += dt; if (al.casting.t >= al.casting.dur) al.casting = null; }
-}
 
 // ═══ master update ═══
 export function updateGame(game, dt, input) {

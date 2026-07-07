@@ -5,6 +5,7 @@ import type {
   Buffs,
   CardDef,
   CardInstance,
+  CastingState,
   Chunk,
   ClassId,
   EffectCtx,
@@ -240,12 +241,6 @@ export interface DashOverride {
 export interface StolenCard {
   inst: CardInstance;
   t: number;
-}
-
-export interface CastingState {
-  def: CardDef | null;
-  t: number;
-  dur: number;
 }
 
 export interface Ally extends RivalSoul {
