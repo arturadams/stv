@@ -1,21 +1,12 @@
 import type {
   Buffs,
   CardInstance,
+  EnemyState,
   School,
   StatusName,
 } from '../data/types.js';
 
-export type { School, StatusName } from '../data/types.js';
-
-export interface EnemyState {
-  uid: number;
-  def: {
-    id: string;
-    boss?: boolean;
-    rival?: boolean;
-  };
-  statuses: Partial<Record<StatusName, { stacks: number; t: number }>>;
-}
+export type { EnemyState, School, StatusName } from '../data/types.js';
 
 export interface EventMap {
   cardDrawn: { inst: CardInstance; reason: string };

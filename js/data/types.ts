@@ -420,3 +420,296 @@ export interface EffectCtx {
   lvl: number;
   basic?: boolean;
 }
+
+export type BehaviorId =
+  | 'chase'
+  | 'ranged'
+  | 'exploder'
+  | 'stalker'
+  | 'mortar'
+  | 'lunge'
+  | 'boss'
+  | 'rival';
+
+export type ClassId = 'mage' | 'warrior' | 'rogue';
+
+export interface BossBanner {
+  title: string;
+  sub: string;
+}
+
+export interface BossMisfireSpec {
+  chance: number;
+  radius: number;
+  damage: number;
+  telegraph: number;
+  spread: number;
+}
+
+export type BossAttackSpec =
+  | { kind: 'summonRing'; id: string; count: number; radius?: number }
+  | {
+      kind: 'lineSlams';
+      count: number;
+      spacing: number;
+      width: number;
+      height: number;
+      damage: number;
+      telegraph: number;
+    }
+  | {
+      kind: 'runeCircles';
+      count: number;
+      radius: number;
+      damage: number;
+      telegraph: number;
+      spread: number;
+    }
+  | { kind: 'cardTheft'; dur: number };
+
+export interface BossPhase {
+  hpBelow: number;
+  banner?: BossBanner;
+  attackInterval: number;
+  speedMult?: number;
+  misfire?: BossMisfireSpec;
+  attacks: readonly BossAttackSpec[];
+}
+
+export interface BossScript {
+  moveBand?: readonly [min: number, max: number];
+  phases: readonly BossPhase[];
+}
+
+export interface EnemyDef {
+  id: string;
+  name: string;
+  role: string;
+  hp: number;
+  speed: number;
+  radius: number;
+  dmg: number;
+  behavior: BehaviorId;
+  color: string;
+  glow: string;
+  shards: number;
+  range?: number;
+  fireRate?: number;
+  projSpeed?: number;
+  fuse?: number;
+  boomR?: number;
+  mortarR?: number;
+  mortarTel?: number;
+  lungeRange?: number;
+  lungeTel?: number;
+  lungeSpeed?: number;
+  lungeChain?: number;
+  waveEvery?: number;
+  waveR?: number;
+  waveTel?: number;
+  waveDmg?: number;
+  summonEvery?: number;
+  summonId?: string;
+  deathBurst?: ExplosionSpec;
+  boss?: boolean;
+  minion?: string;
+  elite?: boolean;
+  rival?: boolean;
+  script?: BossScript;
+}
+
+export interface EnemyStatusState {
+  stacks: number;
+  t: number;
+  acc?: number;
+}
+
+export interface EnemyMark {
+  t: number;
+  amp: number;
+  crit: number;
+}
+
+export type EnemyMode =
+  | 'spawn'
+  | 'active'
+  | 'fuse'
+  | 'vanish'
+  | 'telegraph'
+  | 'lunging';
+
+export interface EnemyState {
+  uid: number;
+  def: EnemyDef;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  r: number;
+  statuses: Partial<Record<StatusName, EnemyStatusState>>;
+  state: EnemyMode;
+  stateT: number;
+  hitFlash: number;
+  freeze: number;
+  stun: number;
+  root: number;
+  kvx: number;
+  kvy: number;
+  kt: number;
+  touchCd: number;
+  mark: EnemyMark | null;
+  wobble: number;
+  dead: boolean;
+  campRef?: Camp | null;
+  featured?: CardDef[] | null;
+  cls?: ClassId | null;
+  ai?: unknown;
+}
+
+interface BasicAttack {
+  name: string;
+  dmg: number;
+  rate: number;
+  range: number;
+  element: ElementId;
+}
+
+export interface ArcBasic extends BasicAttack {
+  kind: 'arc';
+  arc: number;
+  knockback: number;
+}
+
+export interface ProjBasic extends BasicAttack {
+  kind: 'proj';
+  speed: number;
+  radius: number;
+  critChance?: number;
+}
+
+export interface ClassResource {
+  key: 'rage' | 'opportunity';
+  name: string;
+  max: number;
+  color: string;
+  pips?: boolean;
+}
+
+export interface ClassDef {
+  id: ClassId;
+  name: string;
+  school: Exclude<School, 'Colorless'>;
+  color: string;
+  glyph: string;
+  tagline: string;
+  desc: string;
+  basic: ArcBasic | ProjBasic;
+  resource: ClassResource | null;
+}
+
+export type Rgb = readonly [red: number, green: number, blue: number];
+
+export interface BiomeDef {
+  id: string;
+  name: string;
+  floor: Rgb;
+  tileVar: Rgb;
+  grout: string;
+  accent: string;
+  deco: string;
+  hazard: string;
+  hazardEdge: string;
+}
+
+export interface EnemyTier {
+  id: string;
+  minThreat: number;
+  w: number;
+}
+
+export interface WorldDef {
+  num: number;
+  name: string;
+  sub: string;
+  sky: string;
+  biomes: readonly string[];
+  boss: string;
+  threatMult: number;
+  tiers: readonly EnemyTier[];
+}
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface RivalSoul extends Point {
+  cls: ClassId;
+  name: string;
+  featured: CardDef[];
+  color: string;
+  wob: number;
+}
+
+export interface Sanctuary extends Point {
+  r: number;
+  seed: number;
+  lock: boolean;
+  stock: CardDef[] | null;
+}
+
+export interface Pillar extends Point {
+  r: number;
+}
+
+export interface MapDecoration extends Point {
+  rot: number;
+  kind: 'card' | 'rune';
+  g: number;
+}
+
+export interface Shrine extends Point {
+  r: number;
+  cd: number;
+}
+
+export interface Camp extends Point {
+  r: number;
+  size: number;
+  cleared: boolean;
+  engaged: boolean;
+  alive: number;
+}
+
+export interface Landmark extends Point {
+  r: number;
+  zoneR: number;
+  cleared: boolean;
+  engaged: boolean;
+  portal?: boolean;
+}
+
+export interface Treasure extends Point {
+  opened: boolean;
+}
+
+export interface Chunk {
+  cx: number;
+  cy: number;
+  biome: BiomeDef;
+  pillars: Pillar[];
+  pools: Pillar[];
+  candles: Point[];
+  deco: MapDecoration[];
+  shrine?: Shrine;
+  camp?: Camp;
+  landmark?: Landmark;
+  treasure?: Treasure;
+  sanctuary?: Sanctuary;
+}
+
+export interface ZoneRegion extends Point {
+  r: number;
+  kind: 'boss' | 'duel';
+  landmark?: Landmark;
+}
