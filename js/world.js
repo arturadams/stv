@@ -257,7 +257,7 @@ function applyStatus(game, e, status, stacks) {
   game.bus.emit('statusApplied', { enemy: e, status, x: e.x, y: e.y });
 }
 
-function damageEnemy(game, e, amount, opts = {}) {
+export function damageEnemy(game, e, amount, opts = {}) {
   if (!targetable(e)) return;
   let dmg = amount;
   if (e.mark && e.mark.t > 0) dmg *= e.mark.amp;
@@ -1375,7 +1375,7 @@ function campCleared(game, camp) {
   sfx('reward');
 }
 
-function engageBossGate(game, landmark) {
+export function engageBossGate(game, landmark) {
   landmark.engaged = true;
   game.zoneRegion = { x: landmark.x, y: landmark.y, r: landmark.zoneR, kind: 'boss', landmark };
   const threat = threatOf(game);
@@ -1511,7 +1511,7 @@ function buildStock(game, s) {
   }
 }
 
-function openSanctuary(game, s) {
+export function openSanctuary(game, s) {
   s.lock = true;
   buildStock(game, s);
   game.sanctuary = s;
@@ -1642,7 +1642,7 @@ function updateMatchmaking(game, dt) {
   }
 }
 
-function foundRival(game) {
+export function foundRival(game) {
   const mm = game.mm;
   mm.state = 'choice';
   const soul = makeRivalSoul(game);
@@ -1655,7 +1655,7 @@ function foundRival(game) {
   sfx('bossintro');
 }
 
-function matchmakingFallback(game) {
+export function matchmakingFallback(game) {
   const mm = game.mm;
   mm.state = 'idle';
   mm.nextT = game.rng.range(70, 110);

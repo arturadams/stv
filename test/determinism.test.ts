@@ -64,9 +64,11 @@ function simulate(seed: number) {
     initialCardUids,
     snapshot: {
       kills: game.kills,
+      runTime: game.runTime,
       hp: game.player.hp,
       gold: game.gold,
       worldSeed: game.worldSeed,
+      deckIds: game.deckIds,
       cardIds,
     },
   };
