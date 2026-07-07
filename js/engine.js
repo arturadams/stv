@@ -9,6 +9,8 @@
 // short gap follows every resolve so the queue visibly accumulates.
 
 import { CARDS, ELEMENT_COLORS, SCHOOL_COLORS } from './data.js';
+import { makeUidCounter } from './core/ids.js';
+import { makeRng } from './core/rng.js';
 
 export class EventBus {
   constructor() { this.map = new Map(); }
@@ -22,20 +24,21 @@ export class EventBus {
   }
 }
 
-let UID = 1;
 // Cards carry a level: duplicates combined at a Sanctuary grow stronger.
-export function makeCard(id, lvl = 0) {
+export function makeCard(id, lvl = 0, uid = 0) {
   const def = CARDS[id];
   if (!def) throw new Error('unknown card: ' + id);
-  return { uid: UID++, def, cost: def.cost, lvl };
+  return { uid, def, cost: def.cost, lvl };
 }
 
 const ENCHANT_EVENTS = ['statusApplied', 'enemyKilled', 'perfectDodge', 'queueEmpty',
   'playerHit', 'cardResolved', 'powerExpired', 'trapTriggered'];
 
 export class CardEngine {
-  constructor(bus) {
+  constructor(bus, rng = makeRng(Date.now())) {
     this.bus = bus;
+    this.rng = rng;
+    this.cardIds = makeUidCounter();
     this.deck = []; this.discard = []; this.queue = [];
     this.channel = null;           // {inst, t, dur, buffs, cost, preview}
     this.flow = 4; this.maxFlow = 10;
@@ -63,8 +66,12 @@ export class CardEngine {
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }
 
+  makeCard(id, lvl = 0) {
+    return makeCard(id, lvl, this.cardIds.next());
+  }
+
   setDeck(entries) {
-    this.deck = entries.map(e => typeof e === 'string' ? makeCard(e) : makeCard(e.id, e.lvl || 0));
+    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl || 0));
     this.shuffleArray(this.deck);
     this.discard = []; this.queue = []; this.channel = null;
     this.powers = []; this.flushMode = null; this.gapT = 0;
@@ -73,7 +80,7 @@ export class CardEngine {
 
   shuffleArray(a) {
     for (let i = a.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
+      const j = this.rng.int(i + 1);
       [a[i], a[j]] = [a[j], a[i]];
     }
   }
@@ -237,7 +244,7 @@ export class CardEngine {
     switch (op) {
       case 'duplicateNext': {
         const next = this.queue[0];
-        if (next) this.queue.splice(1, 0, { uid: UID++, def: next.def, cost: next.cost + 1, lvl: next.lvl || 0, copy: true });
+        if (next) this.queue.splice(1, 0, { uid: this.cardIds.next(), def: next.def, cost: next.cost + 1, lvl: next.lvl || 0, copy: true });
         break;
       }
       case 'reverse': this.queue.reverse(); break;
@@ -298,7 +305,7 @@ export class CardEngine {
         if (e.filter.hasStatus && !(payload.enemy && payload.enemy.statuses[e.filter.hasStatus])) continue;
         if (e.filter.school && payload.school !== e.filter.school) continue;
       }
-      if (e.chance < 1 && Math.random() > e.chance) continue;
+      if (e.chance < 1 && !this.rng.chance(e.chance)) continue;
       if (this.runEnchantAction) this.runEnchantAction(e.do, payload, e);
     }
   }

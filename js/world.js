@@ -7,7 +7,9 @@ import {
   CARDS, CARD_LIST, RELICS, ENEMIES, CLASSES, BIOMES, BIOME_IDS, WORLDS,
   ELEMENT_COLORS, SCHOOL_COLORS, STARTING_DECKS, ATTUNEMENT_IDS, RIVAL_ADJECTIVES,
 } from './data.js';
-import { EventBus, CardEngine, makeCard } from './engine.js';
+import { EventBus, CardEngine } from './engine.js';
+import { makeUidCounter } from './core/ids.js';
+import { hash2, makeRng } from './core/rng.js';
 import { sfx } from './audio.js';
 
 export const CHUNK = 560;
@@ -20,19 +22,6 @@ const STATUS_DEFS = {
 };
 
 // ═══ deterministic procedural helpers ═══
-function hash2(x, y, seed) {
-  let h = (x | 0) * 374761393 + (y | 0) * 668265263 + (seed | 0) * 974711 + 0x9e3779b9;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return (h ^ (h >>> 16)) >>> 0;
-}
-function mulberry32(a) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 export function worldDef(game) {
   return WORLDS[Math.min(game.world || 1, WORLDS.length) - 1];
@@ -66,14 +55,15 @@ export function biomeOf(cx, cy, seed, biomeIds = BIOME_IDS) {
 }
 
 // ═══ game creation ═══
-export function createGame() {
+export function createGame(opts = {}) {
+  const rng = makeRng(opts.seed);
   const bus = new EventBus();
-  const engine = new CardEngine(bus);
+  const engine = new CardEngine(bus, rng);
   const game = {
-    bus, engine,
+    bus, engine, rng, enemyIds: makeUidCounter(),
     state: 'title', // title | combat | reward | gameover
     time: 0, hitstop: 0, slowmo: 0,
-    worldSeed: (Math.random() * 0x7fffffff) | 0,
+    worldSeed: rng.int(0x7fffffff),
     world: 1,
     playerClass: 'mage',
     player: {
@@ -124,7 +114,7 @@ export function createGame() {
   bus.on('cardDrawn', () => sfx('draw'));
   bus.on('flowGained', ({ amount }) => {
     for (let i = 0; i < Math.min(amount * 2, 8); i++)
-      game.particles.push(mote(game.player.x, game.player.y, '#ffd97a'));
+      game.particles.push(mote(game, game.player.x, game.player.y, '#ffd97a'));
   });
   bus.on('perfectDodge', () => {
     engine.gainFlow(2, 'dodge');
@@ -146,30 +136,30 @@ export function getChunk(game, cx, cy) {
   const key = chunkKey(cx, cy);
   let ch = game.chunks.get(key);
   if (ch) return ch;
-  const rng = mulberry32(hash2(cx, cy, game.worldSeed));
+  const rng = makeRng(hash2(cx, cy, game.worldSeed));
   const bx = cx * CHUNK, by = cy * CHUNK;
   const dist = Math.max(Math.abs(cx), Math.abs(cy)); // chebyshev distance from origin
-  const at = (m = 80) => ({ x: bx + m + rng() * (CHUNK - 2 * m), y: by + m + rng() * (CHUNK - 2 * m) });
+  const at = (m = 80) => ({ x: bx + m + rng.float() * (CHUNK - 2 * m), y: by + m + rng.float() * (CHUNK - 2 * m) });
   ch = { cx, cy, biome: biomeOf(cx, cy, game.worldSeed, worldDef(game).biomes), pillars: [], pools: [], candles: [], deco: [] };
 
-  const nPil = rng() < 0.55 ? 0 : 1 + (rng() * 2 | 0);
-  for (let i = 0; i < nPil; i++) { const p = at(70); ch.pillars.push({ x: p.x, y: p.y, r: 26 + rng() * 20 }); }
-  if (rng() < 0.22) { const p = at(120); ch.pools.push({ x: p.x, y: p.y, r: 70 + rng() * 50 }); }
-  const nCd = (rng() * 3 | 0);
+  const nPil = rng.chance(0.55) ? 0 : 1 + rng.int(2);
+  for (let i = 0; i < nPil; i++) { const p = at(70); ch.pillars.push({ x: p.x, y: p.y, r: 26 + rng.float() * 20 }); }
+  if (rng.chance(0.22)) { const p = at(120); ch.pools.push({ x: p.x, y: p.y, r: 70 + rng.float() * 50 }); }
+  const nCd = rng.int(3);
   for (let i = 0; i < nCd; i++) ch.candles.push(at(50));
-  for (let i = 0; i < 4 + (rng() * 4 | 0); i++) ch.deco.push({ ...at(30), rot: rng() * Math.PI * 2, kind: rng() < 0.6 ? 'card' : 'rune', g: (rng() * 4) | 0 });
-  if (rng() < 0.06 && dist >= 1) ch.shrine = { ...at(90), r: 26, cd: 0 };
-  if (rng() < 0.11 && dist >= 2) {
+  for (let i = 0; i < 4 + rng.int(4); i++) ch.deco.push({ ...at(30), rot: rng.float() * Math.PI * 2, kind: rng.chance(0.6) ? 'card' : 'rune', g: rng.int(4) });
+  if (rng.chance(0.06) && dist >= 1) ch.shrine = { ...at(90), r: 26, cd: 0 };
+  if (rng.chance(0.11) && dist >= 2) {
     const p = at(180);
     ch.camp = { x: p.x, y: p.y, r: 230, size: 4 + Math.min(6, dist), cleared: false, engaged: false, alive: 0 };
   }
-  if (rng() < 0.035 && dist >= 4) {
+  if (rng.chance(0.035) && dist >= 4) {
     const p = at(200);
     ch.landmark = { x: p.x, y: p.y, r: 120, zoneR: 430, cleared: false, engaged: false };
   }
-  if (rng() < 0.05 && dist >= 1 && !ch.camp) ch.treasure = { ...at(90), opened: false };
+  if (rng.chance(0.05) && dist >= 1 && !ch.camp) ch.treasure = { ...at(90), opened: false };
   // sanctuaries: warded rest sites with a merchant and a card table
-  if (rng() < 0.055 && dist >= 2 && !ch.camp && !ch.landmark)
+  if (rng.chance(0.055) && dist >= 2 && !ch.camp && !ch.landmark)
     ch.sanctuary = { ...at(160), r: 190, seed: hash2(cx, cy, game.worldSeed + 1234), lock: false, stock: null };
   // keep the very first screen clean
   if (cx === 0 && cy === 0) { ch.pillars = ch.pillars.slice(0, 1); ch.pools = []; ch.shrine = { x: bx + 140, y: by + 140, r: 26, cd: 0 }; }
@@ -209,16 +199,16 @@ function enemiesIn(game, x, y, r) {
   return game.enemies.filter(e => targetable(e) && Math.hypot(e.x - x, e.y - y) <= r + e.r);
 }
 export function floater(game, x, y, txt, color, size = 13, crit = false) {
-  game.floaters.push({ x: x + (Math.random() * 20 - 10), y, txt, color, t: 0, life: crit ? 1.1 : 0.8, size: crit ? size * 1.5 : size, crit });
+  game.floaters.push({ x: x + game.rng.range(-10, 10), y, txt, color, t: 0, life: crit ? 1.1 : 0.8, size: crit ? size * 1.5 : size, crit });
 }
 function spark(game, x, y, color, n = 8, speed = 160, life = 0.5) {
   for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, s = speed * (0.4 + Math.random() * 0.8);
-    game.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, life: life * (0.6 + Math.random() * 0.8), size: 2 + Math.random() * 3, color, add: true, drag: 3 });
+    const a = game.rng.range(0, Math.PI * 2), s = speed * (0.4 + game.rng.float() * 0.8);
+    game.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, life: life * (0.6 + game.rng.float() * 0.8), size: 2 + game.rng.float() * 3, color, add: true, drag: 3 });
   }
 }
-function mote(x, y, color) {
-  const a = Math.random() * Math.PI * 2;
+function mote(game, x, y, color) {
+  const a = game.rng.range(0, Math.PI * 2);
   return { x: x + Math.cos(a) * 26, y: y + Math.sin(a) * 26, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40 - 60, t: 0, life: 0.7, size: 2.5, color, add: true, drag: 2 };
 }
 function ringFx(game, x, y, r, color, life = 0.45) { game.fx.push({ kind: 'ring', x, y, r, color, t: 0, life }); }
@@ -288,10 +278,10 @@ function killEnemy(game, e, opts = {}) {
   sfx(e.def.boss || e.def.rival ? 'bossdie' : 'kill');
   if (e.def.elite || e.def.boss || e.def.rival) { shake(game, 10); game.hitstop = Math.max(game.hitstop, 0.09); }
   for (let i = 0; i < e.def.shards; i++) {
-    const a = Math.random() * Math.PI * 2, s = 60 + Math.random() * 90;
+    const a = game.rng.range(0, Math.PI * 2), s = 60 + game.rng.float() * 90;
     game.pickups.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, kind: 'shard', t: 0 });
   }
-  if (!e.def.boss && !e.def.rival && Math.random() < 0.07)
+  if (!e.def.boss && !e.def.rival && game.rng.chance(0.07))
     game.pickups.push({ x: e.x, y: e.y, vx: 0, vy: -40, kind: 'heart', t: 0 });
   // World II+: some enemies detonate on death — dying close to them hurts
   if (e.def.deathBurst) {
@@ -303,8 +293,8 @@ function killEnemy(game, e, opts = {}) {
   }
   // gold: the sanctuary economy
   if (e.def.elite || e.def.rival) game.pickups.push({ x: e.x, y: e.y, vx: 0, vy: -50, kind: 'gold', value: 6, t: 0 });
-  else if (!e.def.boss && Math.random() < 0.3)
-    game.pickups.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 80, vy: -40, kind: 'gold', value: 1 + (Math.random() * 2 | 0), t: 0 });
+  else if (!e.def.boss && game.rng.chance(0.3))
+    game.pickups.push({ x: e.x, y: e.y, vx: game.rng.range(-40, 40), vy: -40, kind: 'gold', value: 1 + game.rng.int(2), t: 0 });
 
   // class resources on kills
   const p = game.player;
@@ -381,7 +371,7 @@ function resolveCard(game, inst, buffs, preview) {
 function hitEnemy(game, e, rawDmg, ctx, eff, opts = {}) {
   let critChance = (eff.critChance || 0) + (ctx.buffs.critChance || 0);
   if (e.mark && e.mark.t > 0 && e.mark.crit) critChance += e.mark.crit;
-  const crit = Math.random() < critChance;
+  const crit = game.rng.chance(critChance);
   damageEnemy(game, e, rawDmg * ctx.dmgMult, { crit, color: ELEMENT_COLORS[ctx.def.element], ...opts });
   if (e.dead) return;
   if (eff.status) applyStatus(game, e, eff.status[0], eff.status[1]);
@@ -617,7 +607,7 @@ function runEnchantAction(game, doSpec, payload, ench) {
   if (doSpec.nextChannelMult) engine.nextChannelMult = doSpec.nextChannelMult;
   if (doSpec.cycleAttunement) {
     const opts = ATTUNEMENT_IDS.filter(id => id !== payload.id);
-    const inst = makeCard(opts[(Math.random() * opts.length) | 0]);
+    const inst = game.engine.makeCard(game.rng.pick(opts));
     inst.cost = 0;
     engine.queue.unshift(inst);
     engine.uiDirty = true;
@@ -730,7 +720,7 @@ function updateSustains(game, dt) {
         const n = d.proj.count || 1;
         const base = aimAngle(game) + (d.proj.ring ? s.t * 1.3 : 0); // rings slowly rotate wave to wave
         for (let i = 0; i < n; i++) {
-          let a = d.proj.ring ? base + (i / n) * Math.PI * 2 : base + (Math.random() - 0.5) * (d.proj.spread || 0);
+          let a = d.proj.ring ? base + (i / n) * Math.PI * 2 : base + (game.rng.float() - 0.5) * (d.proj.spread || 0);
           spawnPlayerProj(game, p.x, p.y, a, d.proj, s.ctx);
         }
         sfx('cast', s.def.element);
@@ -779,20 +769,19 @@ function updateTraps(game, dt) {
 }
 
 // ═══ enemies ═══
-let EUID = 1;
 function spawnEnemy(game, idOrDef, x, y, opts = {}) {
   const def = typeof idOrDef === 'string' ? ENEMIES[idOrDef] : idOrDef;
   const hp = Math.round(def.hp * (opts.hpMult || 1));
   const e = {
-    uid: EUID++, def, x, y, hp, maxHp: hp, r: def.radius,
+    uid: game.enemyIds.next(), def, x, y, hp, maxHp: hp, r: def.radius,
     statuses: {}, state: 'spawn', stateT: 0.7, hitFlash: 0, freeze: 0, stun: 0, root: 0,
-    kvx: 0, kvy: 0, kt: 0, touchCd: 0, fireT: 1 + Math.random(), mark: null,
-    wobble: Math.random() * Math.PI * 2, lungeCd: 1.5, waveCd: def.waveEvery || 0,
+    kvx: 0, kvy: 0, kt: 0, touchCd: 0, fireT: 1 + game.rng.float(), mark: null,
+    wobble: game.rng.range(0, Math.PI * 2), lungeCd: 1.5, waveCd: def.waveEvery || 0,
     bossPhase: 1, bossAttackT: 2.2, bossAttackIdx: 0, dead: false,
     campRef: opts.campRef || null,
     // rival-only fields
     featured: opts.featured || null, cls: opts.cls || null,
-    attackT: 1.2, castT: 5 + Math.random() * 3, casting: null, strafeT: 0, strafeDir: 1,
+    attackT: 1.2, castT: 5 + game.rng.float() * 3, casting: null, strafeT: 0, strafeDir: 1,
   };
   game.enemies.push(e);
   game.fx.push({ kind: 'spawn', x, y, r: def.radius * 2, color: def.glow, t: 0, life: 0.7 });
@@ -801,8 +790,8 @@ function spawnEnemy(game, idOrDef, x, y, opts = {}) {
 
 function spawnPointNear(game, minR = 620, maxR = 800) {
   const p = game.player;
-  const a = Math.random() * Math.PI * 2;
-  const d = minR + Math.random() * (maxR - minR);
+  const a = game.rng.range(0, Math.PI * 2);
+  const d = game.rng.range(minR, maxR);
   return { x: p.x + Math.cos(a) * d, y: p.y + Math.sin(a) * d };
 }
 
@@ -891,9 +880,9 @@ function updateEnemy(game, e, dt) {
     if (e.state === 'vanish') {
       e.stateT -= dt;
       if (e.stateT <= 0) {
-        const a = Math.random() * Math.PI * 2;
+        const a = game.rng.range(0, Math.PI * 2);
         e.x = p.x + Math.cos(a) * 170; e.y = p.y + Math.sin(a) * 170;
-        e.state = 'active'; e.stalkT = 3.5 + Math.random() * 1.5;
+        e.state = 'active'; e.stalkT = game.rng.range(3.5, 5);
         game.fx.push({ kind: 'spawn', x: e.x, y: e.y, r: e.r * 2, color: e.def.glow, t: 0, life: 0.5 });
         sfx('blink');
       }
@@ -911,7 +900,7 @@ function updateEnemy(game, e, dt) {
     e.fireT -= dt;
     if (e.fireT <= 0 && dist < e.def.range) {
       e.fireT = e.def.fireRate;
-      const tx = p.x + (Math.random() * 80 - 40), ty = p.y + (Math.random() * 80 - 40);
+      const tx = p.x + game.rng.range(-40, 40), ty = p.y + game.rng.range(-40, 40);
       const def = e.def;
       game.telegraphs.push({
         shape: 'circle', x: tx, y: ty, r: def.mortarR, t: 0, dur: def.mortarTel, color: def.glow,
@@ -930,7 +919,7 @@ function updateEnemy(game, e, dt) {
       if (e.summonCd <= 0 && dist < 600) {
         e.summonCd = e.def.summonEvery;
         for (let i = 0; i < 2; i++) {
-          const a = Math.random() * Math.PI * 2;
+          const a = game.rng.range(0, Math.PI * 2);
           spawnEnemy(game, e.def.summonId || 'wisp', e.x + Math.cos(a) * 60, e.y + Math.sin(a) * 60);
         }
         sfx('summon');
@@ -1029,7 +1018,7 @@ function updateRivalDuel(game, e, dt, dist, ux, uy, spd, rooted) {
 
   // movement: hold the distance band, strafe
   e.strafeT -= dt;
-  if (e.strafeT <= 0) { e.strafeT = 1 + Math.random() * 1.2; e.strafeDir = Math.random() < 0.5 ? -1 : 1; }
+  if (e.strafeT <= 0) { e.strafeT = game.rng.range(1, 2.2); e.strafeDir = game.rng.chance(0.5) ? -1 : 1; }
   if (!rooted && !e.casting) {
     if (dist > band[1]) { e.x += ux * spd * dt; e.y += uy * spd * dt; }
     else if (dist < band[0]) { e.x -= ux * spd * 0.9 * dt; e.y -= uy * spd * 0.9 * dt; }
@@ -1043,9 +1032,9 @@ function updateRivalDuel(game, e, dt, dist, ux, uy, spd, rooted) {
     e.casting.t += dt;
     if (e.casting.t >= e.casting.dur) e.casting = null;
   } else if (e.castT <= 0) {
-    e.castT = 6.5 + Math.random() * 2.5;
+    e.castT = game.rng.range(6.5, 9);
     const spells = (e.featured || []).filter(d => d.cat === 'Spell' || d.cat === 'Power');
-    const card = spells.length ? spells[(Math.random() * spells.length) | 0] : null;
+    const card = spells.length ? game.rng.pick(spells) : null;
     const castDur = 1.8;
     e.casting = { def: card, t: 0, dur: castDur };
     const tx = p.x, ty = p.y;
@@ -1119,7 +1108,7 @@ function updateBoss(game, e, dt, dist, ux, uy, spd) {
     sfx('summon');
   } else if (atk === 'pages') {
     for (let i = 0; i < 3; i++) {
-      const x = p.x + (i - 1) * 190 + (Math.random() * 80 - 40);
+      const x = p.x + (i - 1) * 190 + game.rng.range(-40, 40);
       const y = p.y;
       game.telegraphs.push({
         shape: 'rect', x, y, w: 130, h: 460, t: 0, dur: 1.15 + i * 0.18, color: '#ffd97a',
@@ -1134,7 +1123,7 @@ function updateBoss(game, e, dt, dist, ux, uy, spd) {
   } else if (atk === 'runes') {
     const n = e.bossPhase === 2 ? 4 : 3;
     for (let i = 0; i < n; i++) {
-      const ang = Math.random() * Math.PI * 2, d = Math.random() * 160;
+      const ang = game.rng.range(0, Math.PI * 2), d = game.rng.float() * 160;
       const x = p.x + Math.cos(ang) * d, y = p.y + Math.sin(ang) * d;
       game.telegraphs.push({
         shape: 'circle', x, y, r: 130, t: 0, dur: 1.3 + i * 0.15, color: '#c23b4a',
@@ -1158,8 +1147,8 @@ function updateBoss(game, e, dt, dist, ux, uy, spd) {
     }
   }
   // phase 2 misfires: stray rune circles anywhere near the player
-  if (e.bossPhase === 2 && Math.random() < 0.6) {
-    const x = p.x + (Math.random() * 700 - 350), y = p.y + (Math.random() * 700 - 350);
+  if (e.bossPhase === 2 && game.rng.chance(0.6)) {
+    const x = p.x + (game.rng.float() * 700 - 350), y = p.y + (game.rng.float() * 700 - 350);
     game.telegraphs.push({
       shape: 'circle', x, y, r: 100, t: 0, dur: 1.6, color: '#8f6fff',
       onDone: (g) => {
@@ -1175,7 +1164,7 @@ function updateBoss(game, e, dt, dist, ux, uy, spd) {
 // Every run starts with a rolled hand: 9 randomized Commons and 1 Uncommon,
 // class-focused, guaranteed playable (Powers + a Spell + a Skill). Cards from
 // meta-unlocked later worlds have a small chance to appear.
-export function rollStartingDeck(classId, unlockedWorld = 1, world = 1) {
+export function rollStartingDeck(classId, unlockedWorld = 1, world = 1, rng = makeRng(Date.now())) {
   const school = CLASSES[classId].school;
   const maxW = Math.max(world, unlockedWorld);
   const weightOf = (c) => {
@@ -1192,7 +1181,7 @@ export function rollStartingDeck(classId, unlockedWorld = 1, world = 1) {
     const avail = pool.filter(c => (copies.get(c.id) || 0) < 2);
     if (!avail.length) return null;
     let total = 0; for (const c of avail) total += weightOf(c);
-    let roll = Math.random() * total;
+    let roll = rng.float() * total;
     let pick = avail[0];
     for (const c of avail) { roll -= weightOf(c); if (roll <= 0) { pick = c; break; } }
     copies.set(pick.id, (copies.get(pick.id) || 0) + 1);
@@ -1212,14 +1201,14 @@ export function rollStartingDeck(classId, unlockedWorld = 1, world = 1) {
 
 // Rolled before the run so the player can SEE the hand and pick a world.
 export function prepareRun(game, classId, world = 1) {
-  return { classId, world, deck: rollStartingDeck(classId, metaUnlockedWorld(), world) };
+  return { classId, world, deck: rollStartingDeck(classId, metaUnlockedWorld(), world, game.rng) };
 }
 
 export function startRun(game, classId = 'mage', opts = {}) {
   game.playerClass = classId;
   game.world = Math.min(Math.max(opts.world || 1, 1), WORLDS.length);
   recordWorldReached(game.world);
-  const deck = opts.deck || rollStartingDeck(classId, metaUnlockedWorld(), game.world);
+  const deck = opts.deck || rollStartingDeck(classId, metaUnlockedWorld(), game.world, game.rng);
   game.deckIds = deck.map(e => typeof e === 'string' ? { id: e, lvl: 0 } : { id: e.id, lvl: e.lvl || 0 });
   game.gold = 30; game.sanctuary = null;
   game.relics = [];
@@ -1227,7 +1216,7 @@ export function startRun(game, classId = 'mage', opts = {}) {
   game.state = 'combat';
   game.kills = 0; game.runTime = 0; game.campsCleared = 0; game.bossesSlain = 0; game.duelsWon = 0;
   game.rage = 0; game.opportunity = 0; game.dashOverride = null;
-  game.worldSeed = (Math.random() * 0x7fffffff) | 0;
+  game.worldSeed = opts.seed ?? game.rng.int(0x7fffffff);
   game.chunks = new Map();
   game.player.hp = game.player.maxHp; game.player.armor = 0;
   game.player.x = CHUNK / 2; game.player.y = CHUNK / 2;
@@ -1278,7 +1267,7 @@ export function makeCardReward(game) {
   while (opts.length < 3 && guard-- > 0) {
     let total = 0;
     for (const c of pool) total += draftWeight(game, c);
-    let roll = Math.random() * total;
+    let roll = game.rng.float() * total;
     let pick = pool[0];
     for (const c of pool) { roll -= draftWeight(game, c); if (roll <= 0) { pick = c; break; } }
     if (!opts.includes(pick)) opts.push(pick);
@@ -1292,7 +1281,7 @@ function makeRelicReward(game) {
   const opts = [];
   let guard = 60;
   while (opts.length < Math.min(3, pool.length) && guard-- > 0) {
-    const pick = pool[(Math.random() * pool.length) | 0];
+    const pick = game.rng.pick(pool);
     if (!opts.includes(pick)) opts.push(pick);
   }
   return { type: 'relic', options: opts };
@@ -1312,7 +1301,7 @@ export function applyReward(game, choice) {
   if (choice && game.pendingReward) {
     if (game.pendingReward.type === 'card') {
       game.deckIds.push({ id: choice.id, lvl: 0 });
-      game.engine.deck.push(makeCard(choice.id));
+      game.engine.deck.push(game.engine.makeCard(choice.id));
       game.engine.shuffleArray(game.engine.deck);
     } else {
       applyRelic(game, choice.id);
@@ -1349,8 +1338,8 @@ function applyRelic(game, id) {
 function campComposition(game, threat) {
   const tiers = worldDef(game).tiers.filter(t => threat >= t.minThreat);
   return tiers.map((t, i) => {
-    if (ENEMIES[t.id].elite) return Math.random() < 0.4 ? [t.id, 1] : null;
-    return [t.id, i === 0 ? 3 + (Math.random() * 3 | 0) : 1 + (Math.random() * 2 | 0)];
+    if (ENEMIES[t.id].elite) return game.rng.chance(0.4) ? [t.id, 1] : null;
+    return [t.id, i === 0 ? 3 + game.rng.int(3) : 1 + game.rng.int(2)];
   }).filter(Boolean);
 }
 
@@ -1361,7 +1350,7 @@ function engageCamp(game, camp) {
   let count = 0;
   for (const [id, n] of campComposition(game, threat)) {
     for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * (camp.r - 60);
+      const a = game.rng.range(0, Math.PI * 2), d = 40 + game.rng.float() * (camp.r - 60);
       spawnEnemy(game, id, camp.x + Math.cos(a) * d, camp.y + Math.sin(a) * d, { hpMult, campRef: camp });
       count++;
     }
@@ -1375,14 +1364,14 @@ function campCleared(game, camp) {
   camp.cleared = true;
   game.campsCleared++;
   for (let i = 0; i < 5; i++) {
-    const a = Math.random() * Math.PI * 2;
+    const a = game.rng.range(0, Math.PI * 2);
     game.pickups.push({ x: camp.x, y: camp.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, kind: 'shard', t: 0 });
   }
   game.banner = { title: 'CAMP CLEARED', sub: '', t: 1.5 };
   game.gold += 15;
   floater(game, camp.x, camp.y - 40, '+15◈', '#ffd97a', 14);
   ringFx(game, camp.x, camp.y, camp.r, '#ffd97a', 0.8);
-  if (Math.random() < 0.5) offerReward(game, makeCardReward(game), 'The hoard yields a card');
+  if (game.rng.chance(0.5)) offerReward(game, makeCardReward(game), 'The hoard yields a card');
   sfx('reward');
 }
 
@@ -1414,19 +1403,19 @@ function bossCleared(game) {
 }
 
 // ═══ world progression: step through the portal a slain boss leaves behind ═══
-export function advanceWorld(game) {
+export function advanceWorld(game, opts = {}) {
   if (game.world >= WORLDS.length) return;
   game.world++;
   recordWorldReached(game.world);
   const w = worldDef(game);
-  game.worldSeed = (Math.random() * 0x7fffffff) | 0;
+  game.worldSeed = opts.seed ?? game.rng.int(0x7fffffff);
   game.chunks = new Map();
   game.enemies = []; game.projectiles = []; game.enemyProjectiles = [];
   game.zones = []; game.telegraphs = []; game.pickups = []; game.sustains = []; game.traps = [];
   game.summons = [];
   game.engine.sustainedActive = false;
   game.zoneRegion = null; game.activeBoss = null;
-  game.mm = { state: 'idle', nextT: 50 + Math.random() * 30, searchT: 0, timeout: 9 };
+  game.mm = { state: 'idle', nextT: game.rng.range(50, 80), searchT: 0, timeout: 9 };
   game.rival = null; game.ally = null; game.encounterPause = false;
   game.stolen = null; game.sanctuary = null;
   game.player.x = CHUNK / 2; game.player.y = CHUNK / 2;
@@ -1456,10 +1445,10 @@ function updateWorldFeatures(game, dt) {
     if (ch.treasure && !ch.treasure.opened && Math.hypot(p.x - ch.treasure.x, p.y - ch.treasure.y) < 34) {
       ch.treasure.opened = true;
       ringFx(game, ch.treasure.x, ch.treasure.y, 70, '#ffd97a', 0.7);
-      if (Math.random() < 0.6) offerReward(game, makeCardReward(game), 'The cache holds a card');
+      if (game.rng.chance(0.6)) offerReward(game, makeCardReward(game), 'The cache holds a card');
       else {
         for (let i = 0; i < 6; i++) {
-          const a = Math.random() * Math.PI * 2;
+          const a = game.rng.range(0, Math.PI * 2);
           game.pickups.push({ x: ch.treasure.x, y: ch.treasure.y, vx: Math.cos(a) * 100, vy: Math.sin(a) * 100, kind: 'shard', t: 0 });
         }
         p.hp = Math.min(p.maxHp, p.hp + 10);
@@ -1508,14 +1497,14 @@ export function sellPrice(entry) {
 // the same few cards (until bought), no matter when you arrive.
 function buildStock(game, s) {
   if (s.stock) return;
-  const rng = mulberry32(s.seed);
+  const rng = makeRng(s.seed);
   const pool = CARD_LIST.filter(c => draftWeight(game, c) > 0);
   s.stock = [];
   let guard = 80;
   while (s.stock.length < 4 && guard-- > 0) {
     let total = 0;
     for (const c of pool) total += draftWeight(game, c);
-    let roll = rng() * total;
+    let roll = rng.float() * total;
     let pick = pool[0];
     for (const c of pool) { roll -= draftWeight(game, c); if (roll <= 0) { pick = c; break; } }
     if (!s.stock.includes(pick)) s.stock.push(pick);
@@ -1592,18 +1581,18 @@ function updateAmbientSpawns(game, dt) {
   const ambient = game.enemies.filter(e => !e.campRef && !e.def.boss && !e.def.rival).length;
   game.spawnT -= dt;
   if (game.spawnT <= 0 && ambient < budget) {
-    game.spawnT = 1 + Math.random() * 1.6;
+    game.spawnT = game.rng.range(1, 2.6);
     const tiers = worldDef(game).tiers;
     const pool = tiers.filter(tier => threat >= tier.minThreat);
     let total = 0; for (const tier of pool) total += tier.w;
-    let roll = Math.random() * total;
+    let roll = game.rng.float() * total;
     let pick = pool[0];
     for (const tier of pool) { roll -= tier.w; if (roll <= 0) { pick = tier; break; } }
     const pt = spawnPointNear(game);
     const hpMult = (1 + (threat - 1) * 0.12) * (game.ally ? 1.25 : 1);
-    const n = pick.id === tiers[0].id ? 2 + (Math.random() * 2 | 0) : 1;
+    const n = pick.id === tiers[0].id ? 2 + game.rng.int(2) : 1;
     for (let i = 0; i < n; i++)
-      spawnEnemy(game, pick.id, pt.x + (Math.random() * 80 - 40), pt.y + (Math.random() * 80 - 40), { hpMult });
+      spawnEnemy(game, pick.id, pt.x + game.rng.range(-40, 40), pt.y + game.rng.range(-40, 40), { hpMult });
   }
   // cull enemies that fell too far behind (the world is infinite)
   for (const e of game.enemies) {
@@ -1615,14 +1604,14 @@ function updateAmbientSpawns(game, dt) {
 // ═══ matchmaking — rival soul encounters ═══
 function makeRivalSoul(game) {
   const classIds = Object.keys(CLASSES);
-  const cls = classIds[(Math.random() * classIds.length) | 0];
+  const cls = game.rng.pick(classIds);
   const cdef = CLASSES[cls];
-  const name = `${RIVAL_ADJECTIVES[(Math.random() * RIVAL_ADJECTIVES.length) | 0]} ${cdef.name}`;
+  const name = `${game.rng.pick(RIVAL_ADJECTIVES)} ${cdef.name}`;
   // featured cards: the build identity — 1 Power, 1 Spell, 1 other, 1 Colorless
   const school = cdef.school;
   const pick = (fn) => {
     const pool = CARD_LIST.filter(c => (c.world || 1) <= (game.world || 1) && fn(c));
-    return pool[(Math.random() * pool.length) | 0];
+    return game.rng.pick(pool);
   };
   const featured = [];
   const used = new Set();
@@ -1648,7 +1637,7 @@ function updateMatchmaking(game, dt) {
   } else if (mm.state === 'searching') {
     mm.searchT -= dt;
     // hidden search — the world keeps flowing, no waiting screen
-    if (Math.random() < 0.13 * dt * 10) return foundRival(game);
+    if (game.rng.chance(0.13 * dt * 10)) return foundRival(game);
     if (mm.searchT <= 0) return matchmakingFallback(game);
   }
 }
@@ -1658,7 +1647,7 @@ function foundRival(game) {
   mm.state = 'choice';
   const soul = makeRivalSoul(game);
   const p = game.player;
-  const a = Math.random() * Math.PI * 2;
+  const a = game.rng.range(0, Math.PI * 2);
   game.rival = { ...soul, x: p.x + Math.cos(a) * 380, y: p.y + Math.sin(a) * 380, wob: 0 };
   game.encounterPause = true; // the world holds its breath
   game.banner = { title: 'PLAYER ENCOUNTERED', sub: soul.name, t: 3 };
@@ -1669,7 +1658,7 @@ function foundRival(game) {
 function matchmakingFallback(game) {
   const mm = game.mm;
   mm.state = 'idle';
-  mm.nextT = 70 + Math.random() * 40;
+  mm.nextT = game.rng.range(70, 110);
   game.banner = { title: 'NO RIVAL SOUL ANSWERED THE CALL', sub: 'A guardian has awakened instead', t: 3 };
   const threat = threatOf(game);
   const pt = spawnPointNear(game, 480, 600);
@@ -1684,7 +1673,7 @@ function matchmakingFallback(game) {
 export function resolveEncounterChoice(game, mine) {
   const mm = game.mm;
   if (mm.state !== 'choice' || !game.rival) return;
-  const rivalWants = Math.random() < 0.55 ? 'party' : 'fight';
+  const rivalWants = game.rng.chance(0.55) ? 'party' : 'fight';
   game.encounterPause = false;
   if (mine === 'fight' || rivalWants === 'fight') {
     if (mine !== 'fight') game.banner = { title: 'THE RIVAL DRAWS STEEL', sub: `${game.rival.name} refuses your pact`, t: 2.4 };
@@ -1720,7 +1709,7 @@ function startDuel(game) {
 function duelVictory(game, e) {
   game.duelsWon++;
   game.zoneRegion = null;
-  game.mm = { state: 'idle', nextT: 75 + Math.random() * 45, searchT: 0, timeout: 9 };
+  game.mm = { state: 'idle', nextT: game.rng.range(75, 120), searchT: 0, timeout: 9 };
   game.player.hp = Math.min(game.player.maxHp, game.player.hp + 25);
   game.gold += 30;
   game.engine.gainFlow(5, 'duel');
@@ -1754,7 +1743,7 @@ function updateAlly(game, dt) {
   if (al.t >= al.dur) {
     game.banner = { title: 'THE SOULS PART WAYS', sub: `${al.name} fades back into the realm`, t: 2.6 };
     game.ally = null;
-    game.mm = { state: 'idle', nextT: 80 + Math.random() * 40, searchT: 0, timeout: 9 };
+    game.mm = { state: 'idle', nextT: game.rng.range(80, 120), searchT: 0, timeout: 9 };
     sfx('theft');
     return;
   }
@@ -1775,7 +1764,7 @@ function updateAlly(game, dt) {
   // featured cast: a friendly AoE on a cluster, telegraphed
   al.castT -= dt;
   if (al.castT <= 0 && target) {
-    al.castT = 8 + Math.random() * 3;
+    al.castT = game.rng.range(8, 11);
     const tx2 = target.x, ty2 = target.y;
     const card = al.featured.find(c => c.cat === 'Spell') || al.featured[0];
     const color = card ? colorOf(card) : al.color;
