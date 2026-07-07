@@ -12,6 +12,7 @@ import { CARDS, ELEMENT_COLORS, SCHOOL_COLORS } from './data.js';
 import { EVT } from './core/events.js';
 import { makeUidCounter } from './core/ids.js';
 import { makeRng } from './core/rng.js';
+import { runQueueOp } from './engine/queueOps.js';
 
 // Cards carry a level: duplicates combined at a Sanctuary grow stronger.
 export function makeCard(id, lvl = 0, uid = 0) {
@@ -231,42 +232,7 @@ export class CardEngine {
   }
 
   queueOp(op, params = {}) {
-    switch (op) {
-      case 'duplicateNext': {
-        const next = this.queue[0];
-        if (next) this.queue.splice(1, 0, { uid: this.cardIds.next(), def: next.def, cost: next.cost + 1, lvl: next.lvl || 0, copy: true });
-        break;
-      }
-      case 'reverse': this.queue.reverse(); break;
-      case 'flush':
-        // Fast-forward, not teleport: queued cards still channel (at 3× speed)
-        // and still pay Flow — channel rules and readability are preserved.
-        if (this.queue.length > 0)
-          this.flushMode = { charges: this.queue.length, costMult: params.costMult ?? 1 };
-        break;
-      case 'echoLast': {
-        if (this.lastResolvedId) {
-          const inst = makeCard(this.lastResolvedId, this.lastResolvedLvl || 0);
-          inst.cost += 1;
-          this.queue.push(inst);
-          this.bus.emit(EVT.cardQueued, { inst });
-        }
-        break;
-      }
-      case 'shuffleAll':
-        this.deck.push(...this.discard); this.discard = [];
-        this.shuffleArray(this.deck);
-        this.bus.emit(EVT.deckShuffled, {});
-        break;
-      case 'purge': {
-        let refund = 0;
-        for (const inst of this.queue) refund += inst.cost;
-        this.discard.push(...this.queue); this.queue = [];
-        this.gainFlow(Math.floor(refund / 2), 'purge');
-        this.bus.emit(EVT.queueEmpty, {});
-        break;
-      }
-    }
+    runQueueOp(this, op, params);
     this.uiDirty = true;
   }
 
