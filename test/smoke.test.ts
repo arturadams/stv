@@ -65,10 +65,15 @@ describe('forced headless paths', () => {
 
     engageBossGate(game, landmark);
     const boss = requireRecord(game.activeBoss, 'active boss');
+    let bossesSlainAtEvent = -1;
+    game.bus.on('enemyKilled', ({ enemy }) => {
+      if (enemy.def.boss) bossesSlainAtEvent = game.bossesSlain;
+    });
     stepGame(game, 1, 404);
     damageEnemy(game, boss, Number.MAX_SAFE_INTEGER);
 
     expect(game.bossesSlain).toBe(1);
+    expect(bossesSlainAtEvent).toBe(1);
     expect(landmark).toMatchObject({ cleared: true, portal: true });
     const reward = requireRecord(game.pendingReward, 'relic reward');
     expect(reward.type).toBe('relic');
@@ -93,9 +98,14 @@ describe('forced headless paths', () => {
       if (!isRecord(value) || !isRecord(value.def)) return false;
       return value.def.rival === true;
     });
+    let duelsWonAtEvent = -1;
+    duel.bus.on('enemyKilled', ({ enemy }) => {
+      if (enemy.def.rival) duelsWonAtEvent = duel.duelsWon;
+    });
     stepGame(duel, 1, 505);
     damageEnemy(duel, requireRecord(rival, 'rival enemy'), Number.MAX_SAFE_INTEGER);
     expect(duel.duelsWon).toBe(1);
+    expect(duelsWonAtEvent).toBe(1);
     expect(duel.pendingReward).toMatchObject({ type: 'card' });
 
     const party = makeHeadlessGame(506);

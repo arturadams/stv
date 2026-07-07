@@ -14,6 +14,21 @@ import { distToSegment, wrapAngle } from './core/math.js';
 import { makeRng } from './core/rng.js';
 import { floater, mote, ringFx, shake, spark } from './sim/fx.js';
 import {
+  STATUS_DEFS,
+  aimAngle,
+  applyStatus as applyStatusImpl,
+  chainFrom,
+  damageEnemy as damageEnemyImpl,
+  damagePlayer,
+  enemiesIn,
+  hitEnemy,
+  killEnemy,
+  nearestEnemy,
+  spawnPlayerProj,
+  targetable,
+  threatOf,
+} from './sim/combat.js';
+import {
   CHUNK, biomeOf, chunksNear, clampToRegion, getChunk, worldDef,
 } from './sim/map/chunks.js';
 import {
@@ -25,12 +40,8 @@ export { floater } from './sim/fx.js';
 export { CHUNK, biomeOf, getChunk, worldDef };
 export { engageBossGate };
 
-const STATUS_DEFS = {
-  burn: { dps: 3.0, dur: 3.0, color: ELEMENT_COLORS.fire },
-  poison: { dps: 1.6, dur: 6.0, color: ELEMENT_COLORS.poison },
-  bleed: { dps: 2.2, dur: 4.0, color: '#ff5d6a' },
-  chill: { dps: 0, dur: 2.2, color: ELEMENT_COLORS.frost },
-};
+export function applyStatus(...args) { return applyStatusImpl(...args); }
+export function damageEnemy(...args) { return damageEnemyImpl(...args); }
 
 // ═══ meta progression ═══ reaching a world once unlocks its card set for
 // every later run — even back in World 1 there's a chance to draft it.
@@ -122,40 +133,23 @@ export function createGame(opts = {}) {
     game.slowmo = 0.22; sfx('perfect');
   });
   bus.on(EVT.trapTriggered, () => gainOpportunity(game, 1));
+  bus.on(EVT.enemyKilled, ({ enemy }) => {
+    if (enemy.def.rival) duelVictory(game, enemy);
+    else if (enemy.def.boss && game.zoneRegion?.kind === 'boss') bossCleared(game);
+  });
   bus.on(EVT.powerGained, () => sfx('enchant'));
   return game;
 }
 
 export function colorOf(def) { return ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school]; }
 
-// ═══ helper queries ═══
-function nearestEnemy(game, x, y, excludeUid, maxDist = Infinity) {
-  let best = null, bd = maxDist * maxDist;
-  for (const e of game.enemies) {
-    if (!targetable(e) || e.uid === excludeUid) continue;
-    const d = (e.x - x) ** 2 + (e.y - y) ** 2;
-    if (d < bd) { bd = d; best = e; }
-  }
-  return best;
-}
-function enemiesIn(game, x, y, r) {
-  return game.enemies.filter(e => targetable(e) && Math.hypot(e.x - x, e.y - y) <= r + e.r);
-}
-function threatOf(game) {
-  const dist = Math.hypot(game.player.x, game.player.y);
-  return (1 + game.runTime / 55 + game.kills / 50 + dist / 3800) * worldDef(game).threatMult;
-}
-
-// vanished stalkers and still-spawning enemies can't be hit or targeted
-function targetable(e) { return !e.dead && e.state !== 'spawn' && e.state !== 'vanish'; }
-
 // ═══ class resources ═══
-function gainRage(game, n) {
+export function gainRage(game, n) {
   if (game.playerClass !== 'warrior') return;
   game.rage = Math.min(100, game.rage + n);
   game.rageDecayT = 2.5;
 }
-function gainOpportunity(game, n) {
+export function gainOpportunity(game, n) {
   if (game.playerClass !== 'rogue') return;
   const before = game.opportunity;
   game.opportunity = Math.min(CLASSES.rogue.resource.max, game.opportunity + n);
@@ -171,94 +165,6 @@ function classChannelMult(game, def) {
     return 0.6;
   }
   return 1;
-}
-
-// ═══ damage ═══
-export function applyStatus(game, e, status, stacks) {
-  if ((e.def.boss || e.def.rival) && status === 'chill') stacks = Math.min(stacks, 1);
-  const sd = STATUS_DEFS[status];
-  if (!sd) return;
-  const cur = e.statuses[status];
-  if (cur) { cur.stacks += stacks; cur.t = sd.dur; }
-  else e.statuses[status] = { stacks, t: sd.dur };
-  game.bus.emit(EVT.statusApplied, { enemy: e, status, x: e.x, y: e.y });
-}
-
-export function damageEnemy(game, e, amount, opts = {}) {
-  if (!targetable(e)) return;
-  let dmg = amount;
-  if (e.mark && e.mark.t > 0) dmg *= e.mark.amp;
-  if (opts.crit) dmg *= 2;
-  dmg = Math.max(1, Math.round(dmg));
-  e.hp -= dmg; e.hitFlash = 0.12;
-  floater(game, e.x, e.y - e.r - 6, String(dmg), opts.crit ? '#ffd97a' : (opts.color || '#f2ead6'), opts.crit ? 15 : 12, opts.crit);
-  if (opts.crit) sfx('crit'); else if (!opts.quiet) sfx('hit');
-  if (e.hp <= 0) killEnemy(game, e, opts);
-}
-
-function killEnemy(game, e, opts = {}) {
-  if (e.dead) return;
-  e.dead = true;
-  game.kills++;
-  spark(game, e.x, e.y, e.def.glow, e.def.boss ? 40 : 14, 220, 0.7);
-  ringFx(game, e.x, e.y, e.r * 2.2, e.def.glow, 0.4);
-  sfx(e.def.boss || e.def.rival ? 'bossdie' : 'kill');
-  if (e.def.elite || e.def.boss || e.def.rival) { shake(game, 10); game.hitstop = Math.max(game.hitstop, 0.09); }
-  for (let i = 0; i < e.def.shards; i++) {
-    const a = game.rng.range(0, Math.PI * 2), s = 60 + game.rng.float() * 90;
-    game.pickups.push({ x: e.x, y: e.y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, kind: 'shard', t: 0 });
-  }
-  if (!e.def.boss && !e.def.rival && game.rng.chance(0.07))
-    game.pickups.push({ x: e.x, y: e.y, vx: 0, vy: -40, kind: 'heart', t: 0 });
-  // World II+: some enemies detonate on death — dying close to them hurts
-  if (e.def.deathBurst) {
-    const b = e.def.deathBurst;
-    if (Math.hypot(game.player.x - e.x, game.player.y - e.y) < b.r + game.player.r)
-      damagePlayer(game, b.dmg, e.x, e.y);
-    game.fx.push({ kind: 'blast', x: e.x, y: e.y, r: b.r, color: e.def.glow, t: 0, life: 0.4 });
-    sfx('boom');
-  }
-  // gold: the sanctuary economy
-  if (e.def.elite || e.def.rival) game.pickups.push({ x: e.x, y: e.y, vx: 0, vy: -50, kind: 'gold', value: 6, t: 0 });
-  else if (!e.def.boss && game.rng.chance(0.3))
-    game.pickups.push({ x: e.x, y: e.y, vx: game.rng.range(-40, 40), vy: -40, kind: 'gold', value: 1 + game.rng.int(2), t: 0 });
-
-  // class resources on kills
-  const p = game.player;
-  if (Math.hypot(e.x - p.x, e.y - p.y) < 170) gainRage(game, 6);
-  gainOpportunity(game, e.statuses.poison ? 2 : 1);
-
-  if (e.campRef) { e.campRef.alive -= 1; if (e.campRef.alive <= 0 && e.campRef.engaged) campCleared(game, e.campRef); }
-  if (e.def.rival) { duelVictory(game, e); return; }
-  if (e.def.boss && game.zoneRegion && game.zoneRegion.kind === 'boss') bossCleared(game);
-  game.bus.emit(EVT.enemyKilled, { enemy: e, x: e.x, y: e.y });
-}
-
-function damagePlayer(game, amount, srcX, srcY) {
-  const p = game.player;
-  if (game.state !== 'combat' || game.encounterPause) return;
-  if (p.untargetable > 0) return;
-  if (p.iframes > 0) {
-    if (!p.dodgeCredited && p.dashT > 0) { p.dodgeCredited = true; game.bus.emit(EVT.perfectDodge, {}); }
-    return;
-  }
-  let dmg = amount;
-  if (p.armor > 0) {
-    const ab = Math.min(p.armor, dmg); p.armor -= ab; dmg -= ab;
-    floater(game, p.x, p.y - 24, 'BLOCK ' + ab, '#ffd97a', 12);
-    gainRage(game, 4);
-  }
-  if (dmg > 0) {
-    p.hp -= dmg;
-    floater(game, p.x, p.y - 26, '-' + dmg, '#ff5d6a', 15);
-    shake(game, 7); game.hitstop = Math.max(game.hitstop, 0.05);
-    sfx('hurt');
-    p.iframes = Math.max(p.iframes, 0.5);
-    gainRage(game, 10);
-    for (const pw of game.engine.powers) if (pw.spec.extendOnHit) pw.timeLeft += pw.spec.extendOnHit;
-    game.bus.emit(EVT.playerHit, { amount: dmg });
-    if (p.hp <= 0) { p.hp = 0; game.state = 'gameover'; sfx('death'); }
-  }
 }
 
 // ═══ channel preview ═══
@@ -293,53 +199,6 @@ function resolveCard(game, inst, buffs, preview) {
   const ctx = { def, buffs: { ...buffs, critChance: critBonus }, dmgMult, radMult, preview, lvl };
   for (const eff of def.effects) runEffect(game, eff, ctx);
   game.fx.push({ kind: 'cast', x: p.x, y: p.y, color: colorOf(def), t: 0, life: 0.35 });
-}
-
-function hitEnemy(game, e, rawDmg, ctx, eff, opts = {}) {
-  let critChance = (eff.critChance || 0) + (ctx.buffs.critChance || 0);
-  if (e.mark && e.mark.t > 0 && e.mark.crit) critChance += e.mark.crit;
-  const crit = game.rng.chance(critChance);
-  damageEnemy(game, e, rawDmg * ctx.dmgMult, { crit, color: ELEMENT_COLORS[ctx.def.element], ...opts });
-  if (e.dead) return;
-  if (eff.status) applyStatus(game, e, eff.status[0], eff.status[1]);
-  for (const st of ctx.buffs.addStatus || []) applyStatus(game, e, st[0], st[1]);
-}
-
-function aimAngle(game) {
-  const p = game.player;
-  const t = nearestEnemy(game, p.x, p.y);
-  return t ? Math.atan2(t.y - p.y, t.x - p.x) : p.facing;
-}
-
-function chainFrom(game, start, spec, ctx, fromX, fromY) {
-  let cur = start;
-  let px = fromX, py = fromY;
-  const struck = new Set();
-  for (let j = 0; j <= spec.jumps && cur; j++) {
-    struck.add(cur.uid);
-    game.fx.push({ kind: 'bolt', x1: px, y1: py, x2: cur.x, y2: cur.y, color: ELEMENT_COLORS.lightning, t: 0, life: 0.22 });
-    hitEnemy(game, cur, spec.dmg, ctx, spec);
-    px = cur.x; py = cur.y;
-    let next = null, bd = spec.range * spec.range;
-    for (const e of game.enemies) {
-      if (e.state === 'spawn' || struck.has(e.uid) || e.dead) continue;
-      const d = (e.x - px) ** 2 + (e.y - py) ** 2;
-      if (d < bd) { bd = d; next = e; }
-    }
-    cur = next;
-  }
-  sfx('zap');
-}
-
-function spawnPlayerProj(game, x, y, angle, spec, ctx) {
-  game.projectiles.push({
-    x, y, vx: Math.cos(angle) * spec.speed, vy: Math.sin(angle) * spec.speed,
-    r: spec.radius, dmg: spec.dmg, eff: spec, ctx, pierce: spec.pierce || 0,
-    life: spec.life || 2.2, t: 0, boomerang: spec.boomerang, phase: 0,
-    rehit: spec.rehit ? new Map() : null,
-    color: ELEMENT_COLORS[spec.element || ctx.def.element] || '#fff',
-    hit: new Set(),
-  });
 }
 
 function runEffect(game, eff, ctx) {
