@@ -818,6 +818,25 @@ function drawFeaturedRow(ctx, x, y, featured, t, casting) {
   ctx.restore();
 }
 
+function drawSummon(ctx, s, t) {
+  const fade = Math.min(1, s.t * 3, (s.dur - s.t) * 2);
+  ctx.save();
+  ctx.globalAlpha = 0.75 * fade;
+  ctx.translate(s.x, s.y + Math.sin(t * 3) * 4);
+  glow(ctx, 0, 0, 30, 'rgba(169,143,224,0.25)');
+  ctx.fillStyle = '#241d3d';
+  ctx.beginPath();
+  ctx.moveTo(0, -16);
+  ctx.bezierCurveTo(12, -12, 11, 8, 8, 16);
+  ctx.lineTo(-8, 16);
+  ctx.bezierCurveTo(-11, 8, -12, -12, 0, -16);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(169,143,224,0.7)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#c9b6ff';
+  ctx.beginPath(); ctx.arc(-3, -6, 1.8, 0, Math.PI * 2); ctx.arc(3, -6, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 // ── the player: a hooded card-binder, with power auras & sustained rings ──
 function drawPlayer(game, ctx, t) {
   const p = game.player;
