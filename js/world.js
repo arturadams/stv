@@ -247,7 +247,7 @@ function classChannelMult(game, def) {
 }
 
 // ═══ damage ═══
-function applyStatus(game, e, status, stacks) {
+export function applyStatus(game, e, status, stacks) {
   if ((e.def.boss || e.def.rival) && status === 'chill') stacks = Math.min(stacks, 1);
   const sd = STATUS_DEFS[status];
   if (!sd) return;
@@ -1248,7 +1248,7 @@ const RARITY_WEIGHT = { Common: 55, Uncommon: 30, Rare: 12, Legendary: 3 };
 // schools only with the Prismatic Codex relic. Each world's card set unlocks
 // on arrival there — and stays meta-unlocked for every later run, with a
 // reduced chance when you're playing an earlier world.
-function draftWeight(game, c) {
+export function draftWeight(game, c) {
   const cardWorld = c.world || 1;
   const here = game.world || 1;
   if (cardWorld > Math.max(here, metaUnlockedWorld())) return 0; // never reached
