@@ -1,25 +1,11 @@
-export type School = 'Mage' | 'Warrior' | 'Rogue' | 'Colorless';
-export type StatusName = 'burn' | 'poison' | 'bleed' | 'chill';
+import type {
+  Buffs,
+  CardInstance,
+  School,
+  StatusName,
+} from '../data/types.js';
 
-export interface CardInstance {
-  uid: number;
-  def: {
-    id: string;
-    school: School;
-  };
-  cost: number;
-  lvl: number;
-}
-
-export interface Buffs {
-  dmgMult: number;
-  costMult: number;
-  channelMult: number;
-  radiusMult: number;
-  critChance: number;
-  repeat: number;
-  addStatus: Array<readonly [StatusName, number]>;
-}
+export type { School, StatusName } from '../data/types.js';
 
 export interface EnemyState {
   uid: number;
