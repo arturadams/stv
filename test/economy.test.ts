@@ -1,33 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
 import { cardDef } from './helpers/data.js';
-import {
-  applyStatus,
-  CARD_PRICES,
-  engageBossGate,
-  sellPrice,
-} from '../js/world.js';
+import { applyStatus } from '../js/sim/combat.js';
+import { engageBossGate } from '../js/sim/map/features.js';
+import type { EnemyState } from '../js/data/types.js';
+import { CARD_PRICES, sellPrice } from '../js/world.js';
 import { makeHeadlessGame, stepGame } from './helpers/headless.js';
 
 interface StatusView {
   stacks: number;
   t: number;
   acc?: number;
-}
-
-interface BossView {
-  hp: number;
-  statuses: Record<string, StatusView>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
-function isBossView(value: unknown): value is BossView {
-  return isRecord(value)
-    && typeof value.hp === 'number'
-    && isRecord(value.statuses);
 }
 
 describe('economy rules', () => {
@@ -53,23 +36,20 @@ describe('armor and status rules', () => {
 
   it('stacks and refreshes statuses while capping boss chill', () => {
     const game = makeHeadlessGame(77);
-    const regular: {
-      def: { boss: boolean; rival: boolean };
-      statuses: Record<string, StatusView>;
-    } = { def: { boss: false, rival: false }, statuses: {} };
-    applyStatus(game, regular, 'burn', 2);
+    // Minimal doubles for testing applyStatus's stacking/chill-cap logic in
+    // isolation — it only reads def.boss/def.rival and statuses, so a real
+    // spawned EnemyState isn't needed; cast past the rest of the shape.
+    const regular = { def: { boss: false, rival: false }, statuses: {} as Record<string, StatusView> };
+    applyStatus(game, regular as unknown as EnemyState, 'burn', 2);
     const first = regular.statuses.burn;
     first.t = 1;
-    applyStatus(game, regular, 'burn', 1);
+    applyStatus(game, regular as unknown as EnemyState, 'burn', 1);
 
     expect(first.stacks).toBe(3);
     expect(first.t).toBe(3);
 
-    const boss: {
-      def: { boss: boolean; rival: boolean };
-      statuses: Record<string, StatusView>;
-    } = { def: { boss: true, rival: false }, statuses: {} };
-    applyStatus(game, boss, 'chill', 5);
+    const boss = { def: { boss: true, rival: false }, statuses: {} as Record<string, StatusView> };
+    applyStatus(game, boss as unknown as EnemyState, 'chill', 5);
     expect(boss.statuses.chill.stacks).toBe(1);
     expect(boss.statuses.chill.t).toBe(2.2);
   });
@@ -88,18 +68,17 @@ describe('armor and status rules', () => {
       engaged: false,
     });
     stepGame(game, 1, 89);
-    const bossValue: unknown = game.activeBoss;
-    if (!isBossView(bossValue)) {
-      throw new TypeError('expected active boss');
-    }
-    const boss = bossValue;
+    const boss = game.activeBoss;
+    if (!boss) throw new TypeError('expected active boss');
     const before = boss.hp;
     applyStatus(game, boss, 'burn', 2);
 
     stepGame(game, 1, 90);
 
     expect(boss.hp).toBeLessThan(before);
-    expect(boss.statuses.burn.t).toBeLessThan(3);
+    const burn = boss.statuses.burn;
+    if (!burn) throw new TypeError('expected burn status');
+    expect(burn.t).toBeLessThan(3);
     expect(cardDef('shield_wall').effects[0]).toEqual({ type: 'armor', amount: 25 });
   });
 });

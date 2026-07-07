@@ -51,6 +51,7 @@ export class CardEngine {
     this.computePreview = null;    // (def, buffs) => preview | null
     this.runEnchantAction = null;  // (doSpec, payload, ench) => void
     this.classChannelMult = null;  // (def) => mult — Rage / Opportunity hook
+    this.followPos = null;         // {x, y} — set every frame so self-centered previews can follow the player
     const dispatch = (ev) => (p) => this.dispatchEnchants(ev, p);
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }

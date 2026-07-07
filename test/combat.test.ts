@@ -8,7 +8,7 @@ import {
   spawnPlayerProj,
   targetable,
 } from '../js/sim/combat.js';
-import { spawnEnemy } from '../js/world.js';
+import { spawnEnemy } from '../js/sim/entities/spawn.js';
 import { makeHeadlessGame } from './helpers/headless.js';
 
 describe('typed combat primitives', () => {

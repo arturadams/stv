@@ -1,16 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
+import { damageEnemy } from '../js/sim/combat.js';
+import { engageBossGate } from '../js/sim/map/features.js';
+import { foundRival, matchmakingFallback } from '../js/sim/run/matchmaking.js';
+import { openSanctuary } from '../js/sim/run/sanctuary.js';
 import {
   advanceWorld,
   applyReward,
   buyCard,
   combineCards,
-  damageEnemy,
-  engageBossGate,
-  foundRival,
   leaveSanctuary,
-  matchmakingFallback,
-  openSanctuary,
   resolveEncounterChoice,
   sellCard,
 } from '../js/world.js';
@@ -64,7 +63,8 @@ describe('forced headless paths', () => {
     };
 
     engageBossGate(game, landmark);
-    const boss = requireRecord(game.activeBoss, 'active boss');
+    const boss = game.activeBoss;
+    if (!boss) throw new TypeError('expected active boss');
     let bossesSlainAtEvent = -1;
     game.bus.on('enemyKilled', ({ enemy }) => {
       if (enemy.def.boss) bossesSlainAtEvent = game.bossesSlain;
@@ -75,9 +75,10 @@ describe('forced headless paths', () => {
     expect(game.bossesSlain).toBe(1);
     expect(bossesSlainAtEvent).toBe(1);
     expect(landmark).toMatchObject({ cleared: true, portal: true });
-    const reward = requireRecord(game.pendingReward, 'relic reward');
+    const reward = game.pendingReward;
+    if (!reward) throw new TypeError('expected relic reward');
     expect(reward.type).toBe('relic');
-    const choice = requireArray(reward.options, 'relic options')[0];
+    const choice = reward.options[0];
     applyReward(game, choice);
 
     advanceWorld(game, { seed: 405 });
@@ -94,16 +95,14 @@ describe('forced headless paths', () => {
     resolveEncounterChoice(duel, 'fight');
 
     expect(duel.zoneRegion).toMatchObject({ kind: 'duel' });
-    const rival = requireArray(duel.enemies, 'duel enemies').find((value) => {
-      if (!isRecord(value) || !isRecord(value.def)) return false;
-      return value.def.rival === true;
-    });
+    const rival = duel.enemies.find((e) => e.def.rival === true);
+    if (!rival) throw new TypeError('expected rival enemy');
     let duelsWonAtEvent = -1;
     duel.bus.on('enemyKilled', ({ enemy }) => {
       if (enemy.def.rival) duelsWonAtEvent = duel.duelsWon;
     });
     stepGame(duel, 1, 505);
-    damageEnemy(duel, requireRecord(rival, 'rival enemy'), Number.MAX_SAFE_INTEGER);
+    damageEnemy(duel, rival, Number.MAX_SAFE_INTEGER);
     expect(duel.duelsWon).toBe(1);
     expect(duelsWonAtEvent).toBe(1);
     expect(duel.pendingReward).toMatchObject({ type: 'card' });

@@ -1,10 +1,11 @@
 import { CARDS } from '../../js/data.js';
+import type { Cat, Rarity, School } from '../../js/data/types.js';
 
 export interface CardDefView {
   id: string;
-  school: string;
-  cat: string;
-  rarity: string;
+  school: School;
+  cat: Cat;
+  rarity: Rarity;
   cost: number;
   channel: number;
   tags: readonly string[];

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { damageEnemy } from '../js/sim/combat.js';
 import { updateBasicAttack } from '../js/sim/basicAttack.js';
-import { spawnEnemy } from '../js/world.js';
+import { spawnEnemy } from '../js/sim/entities/spawn.js';
 import { makeHeadlessGame } from './helpers/headless.js';
 
 describe('class resources', () => {

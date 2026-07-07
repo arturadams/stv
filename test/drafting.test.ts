@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { makeRng } from '../js/core/rng.js';
-import {
-  draftWeight,
-  resetMetaProgress,
-  rollStartingDeck,
-  startRun,
-} from '../js/world.js';
+import { draftWeight } from '../js/sim/run/rewards.js';
+import { resetMetaProgress, rollStartingDeck, startRun } from '../js/world.js';
 import { cardDef, readDeckEntries } from './helpers/data.js';
 import { makeHeadlessGame } from './helpers/headless.js';
 

@@ -1,43 +1,22 @@
 import { ENEMIES, WORLDS } from '../../data/index.js';
 import type { Camp, EnemyDef, Landmark } from '../../data/types.js';
 import { sfx } from '../../audio.js';
-import {
-  advanceWorld,
-  makeCardReward,
-  makeRelicReward,
-  offerReward,
-  openSanctuary,
-  spawnEnemy,
-} from '../../world.js';
+import { spawnEnemy } from '../entities/spawn.js';
 import { floater, ringFx } from '../fx.js';
+import { advanceWorld } from '../run/lifecycle.js';
+import { makeCardReward, makeRelicReward, offerReward } from '../run/rewards.js';
+import { openSanctuary } from '../run/sanctuary.js';
 import type { GameState } from '../types.js';
 import { chunksNear, worldDef } from './chunks.js';
 
 const enemyDefs: Record<string, EnemyDef> = ENEMIES;
 
-export type FeatureState = Pick<
-  GameState,
-  | 'rng'
-  | 'floaters'
-  | 'particles'
-  | 'fx'
-  | 'camera'
-  | 'player'
-  | 'world'
-  | 'worldSeed'
-  | 'chunks'
-  | 'runTime'
-  | 'kills'
-  | 'pickups'
-  | 'banner'
-  | 'campsCleared'
-  | 'gold'
-  | 'zoneRegion'
-  | 'activeBoss'
-  | 'bossesSlain'
-  | 'engine'
-  | 'enemies'
->;
+// This used to be a narrow Pick<GameState, ...>, but engageBossGate/
+// campCleared/updateWorldFeatures now call into run/lifecycle, run/rewards,
+// run/sanctuary and entities/spawn — all of which need the full GameState —
+// so the Pick has grown to cover nearly everything anyway. Kept as a named
+// alias since combat.ts composes CombatState from it.
+export type FeatureState = GameState;
 
 function threatOf(game: FeatureState): number {
   const distance = Math.hypot(game.player.x, game.player.y);
