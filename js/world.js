@@ -10,8 +10,12 @@ import {
 import { CardEngine } from './engine.js';
 import { EVT, EventBus } from './core/events.js';
 import { makeUidCounter } from './core/ids.js';
+import { distToSegment, wrapAngle } from './core/math.js';
 import { hash2, makeRng } from './core/rng.js';
+import { floater, mote, ringFx, shake, spark } from './sim/fx.js';
 import { sfx } from './audio.js';
+
+export { floater } from './sim/fx.js';
 
 export const CHUNK = 560;
 
@@ -199,22 +203,6 @@ function nearestEnemy(game, x, y, excludeUid, maxDist = Infinity) {
 function enemiesIn(game, x, y, r) {
   return game.enemies.filter(e => targetable(e) && Math.hypot(e.x - x, e.y - y) <= r + e.r);
 }
-export function floater(game, x, y, txt, color, size = 13, crit = false) {
-  game.floaters.push({ x: x + game.rng.range(-10, 10), y, txt, color, t: 0, life: crit ? 1.1 : 0.8, size: crit ? size * 1.5 : size, crit });
-}
-function spark(game, x, y, color, n = 8, speed = 160, life = 0.5) {
-  for (let i = 0; i < n; i++) {
-    const a = game.rng.range(0, Math.PI * 2), s = speed * (0.4 + game.rng.float() * 0.8);
-    game.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0, life: life * (0.6 + game.rng.float() * 0.8), size: 2 + game.rng.float() * 3, color, add: true, drag: 3 });
-  }
-}
-function mote(game, x, y, color) {
-  const a = game.rng.range(0, Math.PI * 2);
-  return { x: x + Math.cos(a) * 26, y: y + Math.sin(a) * 26, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40 - 60, t: 0, life: 0.7, size: 2.5, color, add: true, drag: 2 };
-}
-function ringFx(game, x, y, r, color, life = 0.45) { game.fx.push({ kind: 'ring', x, y, r, color, t: 0, life }); }
-function shake(game, amt) { game.camera.shake = Math.min(26, game.camera.shake + amt); }
-
 function threatOf(game) {
   const dist = Math.hypot(game.player.x, game.player.y);
   return (1 + game.runTime / 55 + game.kills / 50 + dist / 3800) * worldDef(game).threatMult;
@@ -517,7 +505,7 @@ function runEffect(game, eff, ctx) {
         const d = Math.hypot(e.x - p.x, e.y - p.y);
         if (d > range + e.r) continue;
         let da = Math.atan2(e.y - p.y, e.x - p.x) - a0;
-        while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+        da = wrapAngle(da);
         if (Math.abs(da) > half + 0.25) continue;
         let dmg = eff.dmg;
         if (eff.executeBelow && e.hp / e.maxHp < eff.executeBelow) dmg *= eff.executeMult;
@@ -636,14 +624,6 @@ function runEnchantAction(game, doSpec, payload, ench) {
   if (ench && !ench.relic) spark(game, p.x, p.y, ench.color, 4, 80);
 }
 
-function distToSegment(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
-  if (l2 === 0) return Math.hypot(px - x1, py - y1);
-  let t = ((px - x1) * dx + (py - y1) * dy) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
-}
-
 // ═══ the basic attack — the constant action layer; NOT a card ═══
 function updateBasicAttack(game, dt) {
   const p = game.player;
@@ -680,7 +660,7 @@ function updateBasicAttack(game, dt) {
       const d = Math.hypot(e.x - p.x, e.y - p.y);
       if (d > reach + e.r) continue;
       let da = Math.atan2(e.y - p.y, e.x - p.x) - ang;
-      while (da > Math.PI) da -= Math.PI * 2; while (da < -Math.PI) da += Math.PI * 2;
+      da = wrapAngle(da);
       if (Math.abs(da) > half + 0.2) continue;
       hits++;
       hitEnemy(game, e, base.dmg, ctx, { critChance: 0 }, { quiet: hits > 1 });
