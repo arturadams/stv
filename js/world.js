@@ -7,7 +7,8 @@ import {
   CARDS, CARD_LIST, RELICS, ENEMIES, CLASSES, BIOMES, BIOME_IDS, WORLDS,
   ELEMENT_COLORS, SCHOOL_COLORS, STARTING_DECKS, ATTUNEMENT_IDS, RIVAL_ADJECTIVES,
 } from './data.js';
-import { EventBus, CardEngine } from './engine.js';
+import { CardEngine } from './engine.js';
+import { EVT, EventBus } from './core/events.js';
 import { makeUidCounter } from './core/ids.js';
 import { hash2, makeRng } from './core/rng.js';
 import { sfx } from './audio.js';
@@ -107,23 +108,23 @@ export function createGame(opts = {}) {
   engine.runEnchantAction = (doSpec, payload, ench) => runEnchantAction(game, doSpec, payload, ench);
   engine.classChannelMult = (def) => classChannelMult(game, def);
 
-  bus.on('cardResolved', ({ inst }) => {
+  bus.on(EVT.cardResolved, ({ inst }) => {
     sfx('resolve', inst.def.element);
     spark(game, game.player.x, game.player.y, colorOf(inst.def), 6, 90);
   });
-  bus.on('cardDrawn', () => sfx('draw'));
-  bus.on('flowGained', ({ amount }) => {
+  bus.on(EVT.cardDrawn, () => sfx('draw'));
+  bus.on(EVT.flowGained, ({ amount }) => {
     for (let i = 0; i < Math.min(amount * 2, 8); i++)
       game.particles.push(mote(game, game.player.x, game.player.y, '#ffd97a'));
   });
-  bus.on('perfectDodge', () => {
+  bus.on(EVT.perfectDodge, () => {
     engine.gainFlow(2, 'dodge');
     gainOpportunity(game, 1);
     floater(game, game.player.x, game.player.y - 30, 'PERFECT', '#ffd97a', 18);
     game.slowmo = 0.22; sfx('perfect');
   });
-  bus.on('trapTriggered', () => gainOpportunity(game, 1));
-  bus.on('powerGained', () => sfx('enchant'));
+  bus.on(EVT.trapTriggered, () => gainOpportunity(game, 1));
+  bus.on(EVT.powerGained, () => sfx('enchant'));
   return game;
 }
 
@@ -254,7 +255,7 @@ export function applyStatus(game, e, status, stacks) {
   const cur = e.statuses[status];
   if (cur) { cur.stacks += stacks; cur.t = sd.dur; }
   else e.statuses[status] = { stacks, t: sd.dur };
-  game.bus.emit('statusApplied', { enemy: e, status, x: e.x, y: e.y });
+  game.bus.emit(EVT.statusApplied, { enemy: e, status, x: e.x, y: e.y });
 }
 
 export function damageEnemy(game, e, amount, opts = {}) {
@@ -304,7 +305,7 @@ function killEnemy(game, e, opts = {}) {
   if (e.campRef) { e.campRef.alive -= 1; if (e.campRef.alive <= 0 && e.campRef.engaged) campCleared(game, e.campRef); }
   if (e.def.rival) { duelVictory(game, e); return; }
   if (e.def.boss && game.zoneRegion && game.zoneRegion.kind === 'boss') bossCleared(game);
-  game.bus.emit('enemyKilled', { enemy: e, x: e.x, y: e.y });
+  game.bus.emit(EVT.enemyKilled, { enemy: e, x: e.x, y: e.y });
 }
 
 function damagePlayer(game, amount, srcX, srcY) {
@@ -312,7 +313,7 @@ function damagePlayer(game, amount, srcX, srcY) {
   if (game.state !== 'combat' || game.encounterPause) return;
   if (p.untargetable > 0) return;
   if (p.iframes > 0) {
-    if (!p.dodgeCredited && p.dashT > 0) { p.dodgeCredited = true; game.bus.emit('perfectDodge', {}); }
+    if (!p.dodgeCredited && p.dashT > 0) { p.dodgeCredited = true; game.bus.emit(EVT.perfectDodge, {}); }
     return;
   }
   let dmg = amount;
@@ -329,7 +330,7 @@ function damagePlayer(game, amount, srcX, srcY) {
     p.iframes = Math.max(p.iframes, 0.5);
     gainRage(game, 10);
     for (const pw of game.engine.powers) if (pw.spec.extendOnHit) pw.timeLeft += pw.spec.extendOnHit;
-    game.bus.emit('playerHit', { amount: dmg });
+    game.bus.emit(EVT.playerHit, { amount: dmg });
     if (p.hp <= 0) { p.hp = 0; game.state = 'gameover'; sfx('death'); }
   }
 }
@@ -611,7 +612,7 @@ function runEnchantAction(game, doSpec, payload, ench) {
     inst.cost = 0;
     engine.queue.unshift(inst);
     engine.uiDirty = true;
-    game.bus.emit('cardQueued', { inst });
+    game.bus.emit(EVT.cardQueued, { inst });
     floater(game, p.x, p.y - 38, 'THE CYCLE TURNS', '#b48cff', 12);
   }
   if (doSpec.burst) {
@@ -761,7 +762,7 @@ function updateTraps(game, dt) {
       game.fx.push({ kind: 'blast', x: tr.x, y: tr.y, r: tr.r, color: tr.color, t: 0, life: 0.4 });
       shake(game, 5); sfx('boom');
       tr.dead = true;
-      game.bus.emit('trapTriggered', { x: tr.x, y: tr.y });
+      game.bus.emit(EVT.trapTriggered, { x: tr.x, y: tr.y });
       break;
     }
   }
@@ -1899,7 +1900,7 @@ function updatePlayer(game, dt, input) {
       p.dashT = 0.22; p.dashCd = 0.9; p.iframes = Math.max(p.iframes, 0.3);
       p.dashDir = { ...p.moveDir }; p.dodgeCredited = false;
     }
-    game.bus.emit('dash', {}); sfx('dash');
+    game.bus.emit(EVT.dash, {}); sfx('dash');
   }
   input.dash = false;
 
@@ -2029,7 +2030,7 @@ function updateProjectiles(game, dt) {
     if (pr.t > 4 || Math.hypot(pr.x - p.x, pr.y - p.y) > 1600) { pr.dead = true; continue; }
     const d = Math.hypot(pr.x - p.x, pr.y - p.y);
     if (d < pr.r + p.r + 4) {
-      if (p.iframes > 0 && p.dashT > 0 && !p.dodgeCredited) { p.dodgeCredited = true; game.bus.emit('perfectDodge', {}); }
+      if (p.iframes > 0 && p.dashT > 0 && !p.dodgeCredited) { p.dodgeCredited = true; game.bus.emit(EVT.perfectDodge, {}); }
       else if (p.iframes <= 0 && p.untargetable <= 0) { damagePlayer(game, pr.dmg, pr.x, pr.y); pr.dead = true; }
     }
   }

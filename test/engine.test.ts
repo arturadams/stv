@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { CardEngine, EventBus } from '../js/engine.js';
+import { EventBus } from '../js/core/events.js';
+import { CardEngine } from '../js/engine.js';
 import { makeRng } from '../js/core/rng.js';
 import { cardDef, readCardInstances, readCounts, readPowers } from './helpers/data.js';
 
