@@ -34,6 +34,10 @@ import {
 import {
   bossCleared, campCleared, engageBossGate, updateWorldFeatures,
 } from './sim/map/features.js';
+import {
+  classChannelMult, gainOpportunity, gainRage, updatePlayer,
+} from './sim/player.js';
+import { updateBasicAttack } from './sim/basicAttack.js';
 import { sfx } from './audio.js';
 
 export { floater } from './sim/fx.js';
@@ -65,6 +69,7 @@ export function resetMetaProgress() {
 }
 
 // ═══ game creation ═══
+/** @returns {import('./sim/types.js').GameState} */
 export function createGame(opts = {}) {
   const rng = makeRng(opts.seed);
   const bus = new EventBus();
@@ -142,30 +147,6 @@ export function createGame(opts = {}) {
 }
 
 export function colorOf(def) { return ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school]; }
-
-// ═══ class resources ═══
-export function gainRage(game, n) {
-  if (game.playerClass !== 'warrior') return;
-  game.rage = Math.min(100, game.rage + n);
-  game.rageDecayT = 2.5;
-}
-export function gainOpportunity(game, n) {
-  if (game.playerClass !== 'rogue') return;
-  const before = game.opportunity;
-  game.opportunity = Math.min(CLASSES.rogue.resource.max, game.opportunity + n);
-  if (game.opportunity > before) floater(game, game.player.x, game.player.y - 34, 'OPPORTUNITY', '#8ade6a', 11);
-}
-function classChannelMult(game, def) {
-  if (game.playerClass === 'warrior' && def.school === 'Warrior' && game.rage > 0) {
-    return 1 / (1 + (game.rage / 100) * 0.8); // up to 80% faster at full Rage
-  }
-  if (game.playerClass === 'rogue' && def.school === 'Rogue' && game.opportunity > 0) {
-    game.opportunity -= 1; // spend a stack to quicken the card
-    floater(game, game.player.x, game.player.y - 30, 'QUICKENED', '#8ade6a', 12);
-    return 0.6;
-  }
-  return 1;
-}
 
 // ═══ channel preview ═══
 function computePreview(game, def, buffs) {
@@ -419,67 +400,6 @@ function runEnchantAction(game, doSpec, payload, ench) {
     game.fx.push({ kind: 'blast', x: payload.enemy.x, y: payload.enemy.y, r: s.r, color: ELEMENT_COLORS.poison, t: 0, life: 0.4 });
   }
   if (ench && !ench.relic) spark(game, p.x, p.y, ench.color, 4, 80);
-}
-
-// ═══ the basic attack — the constant action layer; NOT a card ═══
-function updateBasicAttack(game, dt) {
-  const p = game.player;
-  const cls = CLASSES[game.playerClass];
-  if (!cls) return;
-  const mods = game.engine.basicMods();
-  p.attackT -= dt;
-  if (p.attackT > 0) return;
-
-  const base = cls.basic;
-  const range = base.kind === 'arc' ? base.range * mods.arcMult * 0.6 + base.range : base.range;
-  const target = nearestEnemy(game, p.x, p.y, undefined, range);
-  if (!target) { p.attackT = 0.08; return; }
-  p.attackT = base.rate * mods.rateMult;
-
-  let dmgMult = mods.dmgMult;
-  if (game.playerClass === 'warrior') dmgMult *= 1 + game.rage / 200; // Rage empowers swings
-  let critBonus = 0;
-  if (game.playerClass === 'rogue') critBonus += game.opportunity * 0.03;
-  if (p.empower) { dmgMult *= p.empower.mult; critBonus += p.empower.crit || 0; p.empower = null; }
-
-  const ang = Math.atan2(target.y - p.y, target.x - p.x);
-  p.facing = ang;
-  p.basicCount++;
-
-  if (base.kind === 'arc') {
-    // melee swing
-    const half = (base.arc * Math.PI / 180) * mods.arcMult / 2;
-    const reach = base.range * (0.9 + mods.arcMult * 0.1);
-    const ctx = { def: { element: base.element }, buffs: { addStatus: mods.addStatus, critChance: critBonus }, dmgMult };
-    let hits = 0;
-    for (const e of game.enemies) {
-      if (!targetable(e)) continue;
-      const d = Math.hypot(e.x - p.x, e.y - p.y);
-      if (d > reach + e.r) continue;
-      let da = Math.atan2(e.y - p.y, e.x - p.x) - ang;
-      da = wrapAngle(da);
-      if (Math.abs(da) > half + 0.2) continue;
-      hits++;
-      hitEnemy(game, e, base.dmg, ctx, { critChance: 0 }, { quiet: hits > 1 });
-      if (!e.dead && base.knockback) { e.kvx = Math.cos(ang) * base.knockback; e.kvy = Math.sin(ang) * base.knockback; e.kt = 0.15; }
-    }
-    gainRage(game, 2 + hits * 2);
-    game.fx.push({ kind: 'arc', x: p.x, y: p.y, ang, arc: half * 2, range: reach, color: ELEMENT_COLORS[base.element], t: 0, life: 0.22 });
-    sfx('slash');
-  } else {
-    // projectile bolt / knife — possibly transformed by an active Power
-    const spec = mods.override
-      ? { ...mods.override, life: 1.6 }
-      : { dmg: base.dmg, speed: base.speed, radius: base.radius, critChance: base.critChance || 0, element: base.element, life: 1.6 };
-    const ctx = { def: { element: spec.element || base.element }, buffs: { addStatus: mods.addStatus, critChance: critBonus }, dmgMult, basic: true };
-    spawnPlayerProj(game, p.x, p.y, ang, spec, ctx);
-    // Arcane Mirror: every Nth basic fires an extra bolt at another enemy
-    if (mods.extraEvery && p.basicCount % mods.extraEvery === 0) {
-      const other = nearestEnemy(game, p.x, p.y, target.uid, range) || target;
-      spawnPlayerProj(game, p.x, p.y, Math.atan2(other.y - p.y, other.x - p.x), spec, ctx);
-    }
-    sfx('cast', spec.element || base.element);
-  }
 }
 
 // ═══ sustained casts — the card keeps casting while active ═══
@@ -1530,100 +1450,6 @@ function updateStateLabel(game) {
   else if (game.mm.state === 'party' && game.ally) label += ` — Party of 2`;
   else if (game.mm.state === 'searching') label += ' — seeking a rival soul…';
   game.stateLabel = label;
-}
-
-function updatePlayer(game, dt, input) {
-  const p = game.player;
-  let mx = 0, my = 0;
-  if (input.left) mx -= 1; if (input.right) mx += 1;
-  if (input.up) my -= 1; if (input.down) my += 1;
-  const mlen = Math.hypot(mx, my);
-  if (mlen > 0) { mx /= mlen; my /= mlen; p.moveDir = { x: mx, y: my }; }
-
-  p.dashCd -= dt; p.iframes -= dt; p.untargetable -= dt; p.touchCd -= dt;
-
-  if (input.dash && p.dashCd <= 0) {
-    const ov = game.dashOverride;
-    if (ov) {
-      p.dashCd = ov.spec.cd || 0.9;
-      performOverrideDash(game, ov);
-    } else {
-      p.dashT = 0.22; p.dashCd = 0.9; p.iframes = Math.max(p.iframes, 0.3);
-      p.dashDir = { ...p.moveDir }; p.dodgeCredited = false;
-    }
-    game.bus.emit(EVT.dash, {}); sfx('dash');
-  }
-  input.dash = false;
-
-  let speed = p.speed;
-  for (const ch of chunksNear(game, p.x, p.y, 1))
-    for (const pool of ch.pools)
-      if (Math.hypot(p.x - pool.x, p.y - pool.y) < pool.r) speed *= 0.6;
-
-  if (p.dashT > 0) {
-    p.dashT -= dt;
-    p.x += p.dashDir.x * 640 * dt; p.y += p.dashDir.y * 640 * dt;
-    p.trail.push({ x: p.x, y: p.y, t: 0 });
-  } else {
-    p.x += mx * speed * dt; p.y += my * speed * dt;
-  }
-
-  // pillar collision from nearby chunks
-  for (const ch of chunksNear(game, p.x, p.y, 1)) {
-    for (const pil of ch.pillars) {
-      const d = Math.hypot(p.x - pil.x, p.y - pil.y);
-      if (d < pil.r + p.r) {
-        const a = Math.atan2(p.y - pil.y, p.x - pil.x);
-        p.x = pil.x + Math.cos(a) * (pil.r + p.r);
-        p.y = pil.y + Math.sin(a) * (pil.r + p.r);
-      }
-    }
-  }
-  clampToRegion(game, p);
-
-  if (mlen > 0) p.facing = Math.atan2(my, mx);
-  const t = nearestEnemy(game, p.x, p.y);
-  if (t && Math.hypot(t.x - p.x, t.y - p.y) < 520) p.facing = Math.atan2(t.y - p.y, t.x - p.x);
-
-  for (const tr of p.trail) tr.t += dt;
-  p.trail = p.trail.filter(tr => tr.t < 0.3);
-}
-
-// the card-granted dash: Teleport / Shadowstep / Charge replace the plain dodge
-function performOverrideDash(game, ov) {
-  const p = game.player;
-  const s = ov.spec;
-  const dir = (p.moveDir.x || p.moveDir.y) ? p.moveDir : { x: Math.cos(p.facing), y: Math.sin(p.facing) };
-  const x0 = p.x, y0 = p.y;
-  p.dodgeCredited = false;
-  p.iframes = Math.max(p.iframes, 0.35);
-  p.dashT = 0.1; p.dashDir = { x: 0, y: 0 }; // grazing projectiles still count as perfect dodges
-  spark(game, x0, y0, ov.color, 10, 140);
-  p.x += dir.x * s.dist; p.y += dir.y * s.dist;
-  clampToRegion(game, p);
-  for (let i = 1; i <= 4; i++)
-    p.trail.push({ x: x0 + (p.x - x0) * i / 4, y: y0 + (p.y - y0) * i / 4, t: 0, color: ov.color });
-  if (s.kind === 'blink') {
-    if (s.untargetable) p.untargetable = Math.max(p.untargetable, s.untargetable);
-    if (s.empower) { p.empower = { ...s.empower }; floater(game, p.x, p.y - 30, 'EMPOWERED', ov.color, 12); }
-    spark(game, p.x, p.y, ov.color, 10, 140);
-    sfx('blink');
-  } else { // charge: damage and drag everything along the path
-    const ctx = { def: { element: ov.def.element || 'physical' }, buffs: {}, dmgMult: 1 };
-    for (const e of game.enemies) {
-      if (!targetable(e)) continue;
-      if (distToSegment(e.x, e.y, x0, y0, p.x, p.y) < 60 + e.r) {
-        hitEnemy(game, e, s.dmg, ctx, { critChance: 0 });
-        if (!e.dead && s.status) applyStatus(game, e, s.status[0], s.status[1]);
-        if (!e.dead && s.gather) {
-          const ka = Math.atan2(p.y - e.y, p.x - e.x);
-          e.kvx = Math.cos(ka) * s.gather; e.kvy = Math.sin(ka) * s.gather; e.kt = 0.3;
-        }
-      }
-    }
-    game.fx.push({ kind: 'streak', x1: x0, y1: y0, x2: p.x, y2: p.y, color: ov.color, t: 0, life: 0.3 });
-    shake(game, 5); sfx('charge');
-  }
 }
 
 function updateProjectiles(game, dt) {

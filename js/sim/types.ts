@@ -29,6 +29,14 @@ export interface Vec2 {
 
 export type GameMode = 'title' | 'combat' | 'reward' | 'sanctuary' | 'gameover';
 
+export interface Input {
+  up: boolean;
+  down: boolean;
+  left: boolean;
+  right: boolean;
+  dash: boolean;
+}
+
 export interface PlayerTrail extends Vec2 {
   t: number;
   color?: string;

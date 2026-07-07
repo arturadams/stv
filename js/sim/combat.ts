@@ -8,11 +8,11 @@ import type {
 } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { sfx } from '../audio.js';
-import { gainOpportunity, gainRage } from '../world.js';
+import { gainOpportunity, gainRage } from './player.js';
 import { floater, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
-import type { CombatCtx, GameState, Projectile } from './types.js';
+import type { CombatCtx, GameState } from './types.js';
 import type { FeatureState } from './map/features.js';
 
 export interface StatusDef {
@@ -28,15 +28,18 @@ export const STATUS_DEFS: Record<StatusName, StatusDef> = {
   chill: { dps: 0, dur: 2.2, color: ELEMENT_COLORS.frost },
 };
 
-export type CombatState = FeatureState & {
-  bus: GameState['bus'];
-  hitstop: number;
-  encounterPause: boolean;
-  state: string;
-  playerClass: string;
-  opportunity: number;
-  projectiles: Projectile[];
-};
+export type CombatState = FeatureState & Pick<
+  GameState,
+  | 'bus'
+  | 'hitstop'
+  | 'encounterPause'
+  | 'state'
+  | 'playerClass'
+  | 'rage'
+  | 'rageDecayT'
+  | 'opportunity'
+  | 'projectiles'
+>;
 
 export interface DamageOpts {
   crit?: boolean;
