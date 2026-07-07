@@ -1,0 +1,43 @@
+import type { EnemyDef } from './types.js';
+
+// ── Enemies ── corrupted arcana of the cursed realm ──
+export const ENEMIES = {
+  wisp: { id: 'wisp', name: 'Ink Wisp', role: 'swarm', hp: 14, speed: 118, radius: 13,
+    dmg: 8, behavior: 'chase', color: '#3f3560', glow: '#8f6fff', shards: 1 },
+  sentinel: { id: 'sentinel', name: 'Glyph Sentinel', role: 'sniper', hp: 24, speed: 72, radius: 16,
+    dmg: 10, behavior: 'ranged', range: 320, fireRate: 2.3, projSpeed: 250, color: '#2c3a55', glow: '#8fd8ff', shards: 1 },
+  horror: { id: 'horror', name: 'Tome Horror', role: 'exploder', hp: 18, speed: 132, radius: 15,
+    dmg: 22, behavior: 'exploder', fuse: 1.0, boomR: 95, color: '#4a2635', glow: '#ff8a4a', shards: 1 },
+  knight: { id: 'knight', name: 'Cursed Knight', role: 'tank', hp: 60, speed: 55, radius: 21,
+    dmg: 14, behavior: 'lunge', lungeRange: 180, lungeTel: 0.65, lungeSpeed: 460, color: '#23283d', glow: '#c23b4a', shards: 2 },
+  custodian: { id: 'custodian', name: 'Gilded Custodian', role: 'elite', hp: 210, speed: 62, radius: 28,
+    dmg: 18, behavior: 'lunge', lungeRange: 210, lungeTel: 0.7, lungeSpeed: 520,
+    waveEvery: 5, waveR: 170, waveTel: 1.0, waveDmg: 16,
+    elite: true, color: '#3a3020', glow: '#ffd97a', shards: 6 },
+  guardian: { id: 'guardian', name: 'Awoken Guardian', role: 'elite', hp: 320, speed: 66, radius: 30,
+    dmg: 20, behavior: 'lunge', lungeRange: 230, lungeTel: 0.75, lungeSpeed: 540,
+    waveEvery: 4.5, waveR: 190, waveTel: 1.1, waveDmg: 18,
+    elite: true, color: '#26203a', glow: '#b48cff', shards: 10 },
+  librarian: { id: 'librarian', name: 'The Gilded Librarian', role: 'boss', hp: 950, speed: 40, radius: 34,
+    dmg: 16, behavior: 'boss', boss: true, color: '#231a38', glow: '#ffd97a', shards: 12 },
+  book: { id: 'book', name: 'Cursed Book', role: 'minion', hp: 8, speed: 168, radius: 11,
+    dmg: 9, behavior: 'chase', color: '#402d20', glow: '#ff8a4a', shards: 0 },
+
+  // ── World II: The Ember Wastes — harder mechanics ──
+  imp: { id: 'imp', name: 'Ember Imp', role: 'swarm', hp: 20, speed: 150, radius: 12,
+    dmg: 9, behavior: 'chase', deathBurst: { r: 70, dmg: 8 }, color: '#4a2418', glow: '#ff8a4a', shards: 1 },
+  mortar: { id: 'mortar', name: 'Magma Maw', role: 'artillery', hp: 40, speed: 40, radius: 18,
+    dmg: 16, behavior: 'mortar', range: 640, fireRate: 3.2, mortarR: 110, mortarTel: 1.4,
+    color: '#3a1c12', glow: '#ffb347', shards: 2 },
+  stalker: { id: 'stalker', name: 'Ash Stalker', role: 'assassin', hp: 34, speed: 175, radius: 14,
+    dmg: 13, behavior: 'stalker', color: '#241a20', glow: '#a98fe0', shards: 2 },
+  cinder_knight: { id: 'cinder_knight', name: 'Cinder Knight', role: 'tank', hp: 85, speed: 60, radius: 22,
+    dmg: 16, behavior: 'lunge', lungeRange: 190, lungeTel: 0.6, lungeSpeed: 500, lungeChain: 1,
+    color: '#33141a', glow: '#ff5d3a', shards: 3 },
+  pyre_custodian: { id: 'pyre_custodian', name: 'Pyre Custodian', role: 'elite', hp: 340, speed: 64, radius: 29,
+    dmg: 20, behavior: 'lunge', lungeRange: 220, lungeTel: 0.65, lungeSpeed: 540,
+    waveEvery: 4.5, waveR: 180, waveTel: 1.0, waveDmg: 20, summonEvery: 8, summonId: 'imp',
+    elite: true, color: '#3a2012', glow: '#ffb347', shards: 8 },
+  sovereign: { id: 'sovereign', name: 'The Cinder Sovereign', role: 'boss', hp: 1500, speed: 44, radius: 36,
+    dmg: 20, behavior: 'boss', boss: true, minion: 'imp', color: '#33140f', glow: '#ff8a4a', shards: 18 },
+} satisfies Record<string, EnemyDef>;
