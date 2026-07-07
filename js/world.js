@@ -4,20 +4,26 @@
 // This file touches no DOM — the entire game simulates headlessly in Node.
 
 import {
-  CARDS, CARD_LIST, RELICS, ENEMIES, CLASSES, BIOMES, BIOME_IDS, WORLDS,
+  CARDS, CARD_LIST, RELICS, ENEMIES, CLASSES, WORLDS,
   ELEMENT_COLORS, SCHOOL_COLORS, STARTING_DECKS, ATTUNEMENT_IDS, RIVAL_ADJECTIVES,
 } from './data.js';
 import { CardEngine } from './engine.js';
 import { EVT, EventBus } from './core/events.js';
 import { makeUidCounter } from './core/ids.js';
 import { distToSegment, wrapAngle } from './core/math.js';
-import { hash2, makeRng } from './core/rng.js';
+import { makeRng } from './core/rng.js';
 import { floater, mote, ringFx, shake, spark } from './sim/fx.js';
+import {
+  CHUNK, biomeOf, chunksNear, clampToRegion, getChunk, worldDef,
+} from './sim/map/chunks.js';
+import {
+  bossCleared, campCleared, engageBossGate, updateWorldFeatures,
+} from './sim/map/features.js';
 import { sfx } from './audio.js';
 
 export { floater } from './sim/fx.js';
-
-export const CHUNK = 560;
+export { CHUNK, biomeOf, getChunk, worldDef };
+export { engageBossGate };
 
 const STATUS_DEFS = {
   burn: { dps: 3.0, dur: 3.0, color: ELEMENT_COLORS.fire },
@@ -25,12 +31,6 @@ const STATUS_DEFS = {
   bleed: { dps: 2.2, dur: 4.0, color: '#ff5d6a' },
   chill: { dps: 0, dur: 2.2, color: ELEMENT_COLORS.frost },
 };
-
-// ═══ deterministic procedural helpers ═══
-
-export function worldDef(game) {
-  return WORLDS[Math.min(game.world || 1, WORLDS.length) - 1];
-}
 
 // ═══ meta progression ═══ reaching a world once unlocks its card set for
 // every later run — even back in World 1 there's a chance to draft it.
@@ -51,12 +51,6 @@ function recordWorldReached(n) {
 export function resetMetaProgress() {
   META.unlockedWorld = 1;
   try { if (typeof localStorage !== 'undefined') localStorage.removeItem(META_KEY); } catch (e) { /* ignore */ }
-}
-
-export function biomeOf(cx, cy, seed, biomeIds = BIOME_IDS) {
-  const rx = Math.floor(cx / 6), ry = Math.floor(cy / 6);
-  if (rx === 0 && ry === 0) return BIOMES[biomeIds[0]]; // home region
-  return BIOMES[biomeIds[hash2(rx, ry, seed + 77) % biomeIds.length]];
 }
 
 // ═══ game creation ═══
@@ -133,62 +127,6 @@ export function createGame(opts = {}) {
 }
 
 export function colorOf(def) { return ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school]; }
-
-// ═══ infinite procedural map ═══
-function chunkKey(cx, cy) { return cx + ',' + cy; }
-
-export function getChunk(game, cx, cy) {
-  const key = chunkKey(cx, cy);
-  let ch = game.chunks.get(key);
-  if (ch) return ch;
-  const rng = makeRng(hash2(cx, cy, game.worldSeed));
-  const bx = cx * CHUNK, by = cy * CHUNK;
-  const dist = Math.max(Math.abs(cx), Math.abs(cy)); // chebyshev distance from origin
-  const at = (m = 80) => ({ x: bx + m + rng.float() * (CHUNK - 2 * m), y: by + m + rng.float() * (CHUNK - 2 * m) });
-  ch = { cx, cy, biome: biomeOf(cx, cy, game.worldSeed, worldDef(game).biomes), pillars: [], pools: [], candles: [], deco: [] };
-
-  const nPil = rng.chance(0.55) ? 0 : 1 + rng.int(2);
-  for (let i = 0; i < nPil; i++) { const p = at(70); ch.pillars.push({ x: p.x, y: p.y, r: 26 + rng.float() * 20 }); }
-  if (rng.chance(0.22)) { const p = at(120); ch.pools.push({ x: p.x, y: p.y, r: 70 + rng.float() * 50 }); }
-  const nCd = rng.int(3);
-  for (let i = 0; i < nCd; i++) ch.candles.push(at(50));
-  for (let i = 0; i < 4 + rng.int(4); i++) ch.deco.push({ ...at(30), rot: rng.float() * Math.PI * 2, kind: rng.chance(0.6) ? 'card' : 'rune', g: rng.int(4) });
-  if (rng.chance(0.06) && dist >= 1) ch.shrine = { ...at(90), r: 26, cd: 0 };
-  if (rng.chance(0.11) && dist >= 2) {
-    const p = at(180);
-    ch.camp = { x: p.x, y: p.y, r: 230, size: 4 + Math.min(6, dist), cleared: false, engaged: false, alive: 0 };
-  }
-  if (rng.chance(0.035) && dist >= 4) {
-    const p = at(200);
-    ch.landmark = { x: p.x, y: p.y, r: 120, zoneR: 430, cleared: false, engaged: false };
-  }
-  if (rng.chance(0.05) && dist >= 1 && !ch.camp) ch.treasure = { ...at(90), opened: false };
-  // sanctuaries: warded rest sites with a merchant and a card table
-  if (rng.chance(0.055) && dist >= 2 && !ch.camp && !ch.landmark)
-    ch.sanctuary = { ...at(160), r: 190, seed: hash2(cx, cy, game.worldSeed + 1234), lock: false, stock: null };
-  // keep the very first screen clean
-  if (cx === 0 && cy === 0) { ch.pillars = ch.pillars.slice(0, 1); ch.pools = []; ch.shrine = { x: bx + 140, y: by + 140, r: 26, cd: 0 }; }
-  game.chunks.set(key, ch);
-  return ch;
-}
-
-function chunksNear(game, x, y, radius = 1) {
-  const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
-  const out = [];
-  for (let dy = -radius; dy <= radius; dy++)
-    for (let dx = -radius; dx <= radius; dx++)
-      out.push(getChunk(game, cx + dx, cy + dy));
-  return out;
-}
-
-function clampToRegion(game, obj, pad = 0) {
-  const z = game.zoneRegion;
-  if (!z) return;
-  const dx = obj.x - z.x, dy = obj.y - z.y;
-  const d = Math.hypot(dx, dy);
-  const max = z.r - (obj.r || 12) - pad;
-  if (d > max) { obj.x = z.x + dx / d * max; obj.y = z.y + dy / d * max; }
-}
 
 // ═══ helper queries ═══
 function nearestEnemy(game, x, y, excludeUid, maxDist = Infinity) {
@@ -750,7 +688,8 @@ function updateTraps(game, dt) {
 }
 
 // ═══ enemies ═══
-function spawnEnemy(game, idOrDef, x, y, opts = {}) {
+/** @returns {import('./data/types.js').EnemyState} */
+export function spawnEnemy(game, idOrDef, x, y, opts = {}) {
   const def = typeof idOrDef === 'string' ? ENEMIES[idOrDef] : idOrDef;
   const hp = Math.round(def.hp * (opts.hpMult || 1));
   const e = {
@@ -1255,7 +1194,7 @@ export function makeCardReward(game) {
   }
   return { type: 'card', options: opts };
 }
-function makeRelicReward(game) {
+export function makeRelicReward(game) {
   const owned = new Set(game.relics.map(r => r.id));
   const pool = Object.values(RELICS).filter(r => !owned.has(r.id));
   if (pool.length === 0) return makeCardReward(game);
@@ -1268,7 +1207,7 @@ function makeRelicReward(game) {
   return { type: 'relic', options: opts };
 }
 
-function offerReward(game, reward, heading) {
+export function offerReward(game, reward, heading) {
   game.rewardQueue.push({ ...reward, heading });
   if (!game.pendingReward) {
     game.pendingReward = game.rewardQueue.shift();
@@ -1315,74 +1254,6 @@ function applyRelic(game, id) {
   game.uiDirty = true;
 }
 
-// ═══ world features: camps, boss gates, shrines, treasure ═══
-function campComposition(game, threat) {
-  const tiers = worldDef(game).tiers.filter(t => threat >= t.minThreat);
-  return tiers.map((t, i) => {
-    if (ENEMIES[t.id].elite) return game.rng.chance(0.4) ? [t.id, 1] : null;
-    return [t.id, i === 0 ? 3 + game.rng.int(3) : 1 + game.rng.int(2)];
-  }).filter(Boolean);
-}
-
-function engageCamp(game, camp) {
-  camp.engaged = true;
-  const threat = threatOf(game);
-  const hpMult = 1 + (threat - 1) * 0.12;
-  let count = 0;
-  for (const [id, n] of campComposition(game, threat)) {
-    for (let i = 0; i < n; i++) {
-      const a = game.rng.range(0, Math.PI * 2), d = 40 + game.rng.float() * (camp.r - 60);
-      spawnEnemy(game, id, camp.x + Math.cos(a) * d, camp.y + Math.sin(a) * d, { hpMult, campRef: camp });
-      count++;
-    }
-  }
-  camp.alive = count;
-  game.banner = { title: 'ENEMY CAMP', sub: 'Corrupted arcana defends its hoard', t: 1.8 };
-  sfx('wave');
-}
-
-function campCleared(game, camp) {
-  camp.cleared = true;
-  game.campsCleared++;
-  for (let i = 0; i < 5; i++) {
-    const a = game.rng.range(0, Math.PI * 2);
-    game.pickups.push({ x: camp.x, y: camp.y, vx: Math.cos(a) * 90, vy: Math.sin(a) * 90, kind: 'shard', t: 0 });
-  }
-  game.banner = { title: 'CAMP CLEARED', sub: '', t: 1.5 };
-  game.gold += 15;
-  floater(game, camp.x, camp.y - 40, '+15◈', '#ffd97a', 14);
-  ringFx(game, camp.x, camp.y, camp.r, '#ffd97a', 0.8);
-  if (game.rng.chance(0.5)) offerReward(game, makeCardReward(game), 'The hoard yields a card');
-  sfx('reward');
-}
-
-export function engageBossGate(game, landmark) {
-  landmark.engaged = true;
-  game.zoneRegion = { x: landmark.x, y: landmark.y, r: landmark.zoneR, kind: 'boss', landmark };
-  const threat = threatOf(game);
-  const bossId = worldDef(game).boss;
-  game.activeBoss = spawnEnemy(game, bossId, landmark.x, landmark.y - 120, { hpMult: 0.75 + threat * 0.12 / worldDef(game).threatMult });
-  game.banner = { title: ENEMIES[bossId].name.toUpperCase(), sub: 'A boss gate seals behind you', t: 2.6 };
-  sfx('bossintro');
-}
-
-function bossCleared(game) {
-  const lm = game.zoneRegion && game.zoneRegion.landmark;
-  if (lm) { lm.cleared = true; lm.portal = game.world < WORLDS.length; }
-  game.zoneRegion = null;
-  game.activeBoss = null;
-  game.bossesSlain++;
-  game.gold += 40;
-  game.player.hp = Math.min(game.player.maxHp, game.player.hp + 30);
-  game.banner = {
-    title: 'THE GATE FALLS SILENT',
-    sub: lm && lm.portal ? 'A relic surfaces — and a passage to the next world opens' : 'A relic surfaces from the wreckage',
-    t: 2.8,
-  };
-  offerReward(game, makeRelicReward(game), 'Choose a relic');
-  sfx('victory');
-}
-
 // ═══ world progression: step through the portal a slain boss leaves behind ═══
 export function advanceWorld(game, opts = {}) {
   if (game.world >= WORLDS.length) return;
@@ -1405,65 +1276,6 @@ export function advanceWorld(game, opts = {}) {
   game.banner = { title: w.name, sub: `${w.sub} — the realm grows crueler`, t: 3.2 };
   game.uiDirty = true;
   sfx('victory');
-}
-
-function updateWorldFeatures(game, dt) {
-  const p = game.player;
-  for (const ch of chunksNear(game, p.x, p.y, 2)) {
-    // shrines: +3 Flow on touch
-    if (ch.shrine) {
-      const sh = ch.shrine;
-      sh.cd -= dt;
-      if (sh.cd <= 0 && Math.hypot(p.x - sh.x, p.y - sh.y) < sh.r + p.r + 6) {
-        sh.cd = 12;
-        game.engine.gainFlow(3, 'shrine');
-        floater(game, sh.x, sh.y - 40, '+3 FLOW', '#8fd8ff', 14);
-        ringFx(game, sh.x, sh.y, 60, '#8fd8ff', 0.6);
-        sfx('shrine');
-      }
-    }
-    // treasure caches
-    if (ch.treasure && !ch.treasure.opened && Math.hypot(p.x - ch.treasure.x, p.y - ch.treasure.y) < 34) {
-      ch.treasure.opened = true;
-      ringFx(game, ch.treasure.x, ch.treasure.y, 70, '#ffd97a', 0.7);
-      if (game.rng.chance(0.6)) offerReward(game, makeCardReward(game), 'The cache holds a card');
-      else {
-        for (let i = 0; i < 6; i++) {
-          const a = game.rng.range(0, Math.PI * 2);
-          game.pickups.push({ x: ch.treasure.x, y: ch.treasure.y, vx: Math.cos(a) * 100, vy: Math.sin(a) * 100, kind: 'shard', t: 0 });
-        }
-        p.hp = Math.min(p.maxHp, p.hp + 10);
-        game.gold += 15;
-        floater(game, p.x, p.y - 30, 'CACHE +15◈', '#ffd97a', 14);
-      }
-      sfx('reward');
-    }
-    if (game.zoneRegion) continue; // no new fights while a region is sealed
-    // sanctuaries: step onto the hearth to rest
-    if (ch.sanctuary) {
-      const s = ch.sanctuary;
-      const d = Math.hypot(p.x - s.x, p.y - s.y);
-      if (s.lock && d > 110) s.lock = false;
-      if (!s.lock && d < 48) openSanctuary(game, s);
-    }
-    // enemy camps
-    if (ch.camp && !ch.camp.cleared && !ch.camp.engaged &&
-        Math.hypot(p.x - ch.camp.x, p.y - ch.camp.y) < ch.camp.r + 240) {
-      engageCamp(game, ch.camp);
-    }
-    // boss gates
-    if (ch.landmark && !ch.landmark.cleared && !ch.landmark.engaged &&
-        Math.hypot(p.x - ch.landmark.x, p.y - ch.landmark.y) < ch.landmark.zoneR - 90) {
-      engageBossGate(game, ch.landmark);
-    }
-    // the portal to the next world, left where a boss fell
-    if (ch.landmark && ch.landmark.portal &&
-        Math.hypot(p.x - ch.landmark.x, p.y - ch.landmark.y) < 42) {
-      ch.landmark.portal = false;
-      advanceWorld(game);
-      return;
-    }
-  }
 }
 
 // ═══ sanctuaries: rest, trade, and combine duplicate cards ═══
