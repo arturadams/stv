@@ -1,60 +1,140 @@
 // ── Arcana Engine · DOM interface ──────────────────────────────────────────
-// The card pipeline UI is the identity of the game: Deck → Queue → Channel →
-// Resolve → Discard, rendered as living arcane artifacts.
+// The card pipeline UI is the identity of the game: Deck → Queue → Active →
+// Discard, rendered as living arcane artifacts. The new rhythm demands
+// visibility: power badges, duration bars, the active cast slot, card pops.
 
-import { SCHOOL_COLORS, ELEMENT_COLORS, RARITY_COLORS } from './data.js';
-import { startRun, applyReward, colorOf } from './world.js';
+import { SCHOOL_COLORS, ELEMENT_COLORS, RARITY_COLORS, CLASSES, CARDS, WORLDS } from './data.js';
+import {
+  startRun, applyReward, resolveEncounterChoice, colorOf, prepareRun,
+  buyCard, sellCard, combineCards, leaveSanctuary, sellPrice, CARD_PRICES, MAX_CARD_LVL,
+} from './world.js';
 import { initAudio, sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 let els = {};
 let knownQueueUids = new Set();
+let selectedClass = 'mage';
+let pendingRun = null;
+let lastPopUid = 0;
+let powersSig = '';
 
 export function initUI(game) {
   els = {
     hpFill: $('hp-fill'), hpText: $('hp-text'), armor: $('armor-chip'),
     flowFill: $('flow-fill'), flowText: $('flow-text'), flowBar: $('flow-bar'),
-    combo: $('combo'), encounter: $('encounter-label'), waveLabel: $('wave-label'),
+    resWrap: $('res-wrap'), resLabel: $('res-label'), resFill: $('res-fill'), resText: $('res-text'),
+    powers: $('powers'),
+    combo: $('combo'), encounter: $('encounter-label'),
     relics: $('relics'), chips: $('chips'),
     deckCount: $('deck-count'), discardCount: $('discard-count'),
-    queueRow: $('queue-row'), channelSlot: $('channel-slot'),
+    queueRow: $('queue-row'), channelSlot: $('channel-slot'), activeName: $('active-name'),
+    cardPop: $('card-pop'),
     banner: $('banner'), bannerTitle: $('banner-title'), bannerSub: $('banner-sub'),
     bossBar: $('boss-bar'), bossFill: $('boss-fill'), bossName: $('boss-name'),
     overlayTitle: $('title-overlay'), overlayReward: $('reward-overlay'),
     overlayEnd: $('end-overlay'), endTitle: $('end-title'), endSub: $('end-sub'), endStats: $('end-stats'),
+    overlayEncounter: $('encounter-overlay'), encName: $('enc-name'), encCards: $('enc-cards'),
+    goldChip: $('gold-chip'),
+    overlaySanct: $('sanctuary-overlay'), sanctGold: $('sanct-gold'),
+    shopStock: $('shop-stock'), sanctDeck: $('sanct-deck'), sanctDeckCount: $('sanct-deck-count'),
     rewardCards: $('reward-cards'), rewardHeading: $('reward-heading'),
+    classRow: $('class-row'),
+    overlaySetup: $('setup-overlay'), setupClass: $('setup-class'),
+    worldRow: $('world-row'), startCards: $('start-cards'),
     tooltip: $('tooltip'), stolen: $('stolen-note'),
   };
+
+  buildClassSelect(game);
 
   $('start-btn').addEventListener('click', () => {
     initAudio();
     els.overlayTitle.classList.add('hidden');
-    startRun(game);
+    pendingRun = prepareRun(game, selectedClass, 1);
+    buildSetup(game);
+    els.overlaySetup.classList.remove('hidden');
+  });
+  $('reroll-btn').addEventListener('click', () => {
+    sfx('draw');
+    pendingRun = prepareRun(game, pendingRun.classId, pendingRun.world);
+    buildSetup(game);
+  });
+  $('enter-btn').addEventListener('click', () => {
+    els.overlaySetup.classList.add('hidden');
+    sfx('reward');
+    startRun(game, pendingRun.classId, { world: pendingRun.world, deck: pendingRun.deck });
   });
   $('retry-btn').addEventListener('click', () => {
     els.overlayEnd.classList.add('hidden');
-    resetRunState(game);
-    startRun(game);
+    els.overlayTitle.classList.remove('hidden');
+    game.state = 'title';
   });
   $('reward-skip').addEventListener('click', () => {
     applyReward(game, null);
     syncOverlays(game);
   });
+  $('fight-btn').addEventListener('click', () => {
+    els.overlayEncounter.classList.add('hidden');
+    resolveEncounterChoice(game, 'fight');
+  });
+  $('party-btn').addEventListener('click', () => {
+    els.overlayEncounter.classList.add('hidden');
+    resolveEncounterChoice(game, 'party');
+  });
+  $('leave-btn').addEventListener('click', () => leaveSanctuary(game));
 }
 
-function resetRunState(game) {
-  // a fresh run keeps unlocks simple: same starting deck, no relics
-  game.deckIds = game.deckIds.slice(0, 10);
-  game.relics = [];
-  game.relicRadiusMult = 1; game.hasDuelist = false;
-  game.engine.maxFlow = 10; game.engine.channelMultGlobal = 1;
-  game.engine.modStack = []; game.engine.enchants = []; game.engine.flowJobs = [];
-  game.engine.hasteMult = 1; game.engine.combo = 0;
-  game.stolen = null;
+// ── class selection on the title screen ──
+function buildClassSelect(game) {
+  els.classRow.innerHTML = '';
+  for (const cls of Object.values(CLASSES)) {
+    const el = document.createElement('div');
+    el.className = 'class-card' + (cls.id === selectedClass ? ' selected' : '');
+    el.style.setProperty('--c', cls.color);
+    el.innerHTML = `
+      <div class="class-glyph">${cls.glyph}</div>
+      <div class="class-name">${cls.name}</div>
+      <div class="class-tagline">${cls.tagline}</div>
+      <div class="class-desc">${cls.desc}</div>
+      <div class="class-basic">Basic attack — <b>${cls.basic.name}</b></div>`;
+    el.addEventListener('click', () => {
+      selectedClass = cls.id;
+      initAudio(); sfx('engine');
+      for (const c of els.classRow.children) c.classList.remove('selected');
+      el.classList.add('selected');
+    });
+    els.classRow.appendChild(el);
+  }
+}
+
+// ── run setup: the rolled hand + world selection ──
+function buildSetup(game) {
+  const cls = CLASSES[pendingRun.classId];
+  els.setupClass.innerHTML = `<span style="color:${cls.color}">${cls.glyph} ${cls.name}</span>`;
+
+  els.worldRow.innerHTML = '';
+  for (const w of WORLDS) {
+    const btn = document.createElement('button');
+    btn.className = 'world-btn' + (w.num === pendingRun.world ? ' selected' : '');
+    btn.innerHTML = `<span class="wb-sub">${w.sub}</span><span class="wb-name">${w.name}</span>`;
+    btn.addEventListener('click', () => {
+      sfx('engine');
+      pendingRun = prepareRun(game, pendingRun.classId, w.num); // reroll for the new world's pool
+      buildSetup(game);
+    });
+    els.worldRow.appendChild(btn);
+  }
+
+  els.startCards.innerHTML = '';
+  for (const entry of pendingRun.deck) {
+    const def = CARDS[entry.id];
+    const el = buildCardEl(def, 'mini');
+    attachTooltip(el, def);
+    els.startCards.appendChild(el);
+  }
 }
 
 // ── card element factory ──
-export function buildCardEl(def, size) {
+export function buildCardEl(def, size, lvl = 0) {
   const el = document.createElement('div');
   el.className = `card ${size} school-${def.school.toLowerCase()} rarity-${def.rarity.toLowerCase()}`;
   const schoolC = SCHOOL_COLORS[def.school];
@@ -62,16 +142,18 @@ export function buildCardEl(def, size) {
   el.style.setProperty('--school', schoolC);
   el.style.setProperty('--elem', elemC);
   el.style.setProperty('--rarity', RARITY_COLORS[def.rarity]);
+  const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;
+  const lvlBadge = lvl > 0 ? `<div class="card-lvl">${'★'.repeat(lvl)}</div>` : '';
   if (size === 'mini') {
     el.innerHTML = `
-      <div class="card-cost">${def.cost}</div>
+      <div class="card-cost">${def.cost}</div>${lvlBadge}
       <div class="card-art"><span class="card-glyph">${def.glyph}</span></div>
       <div class="card-mininame">${def.name}</div>`;
   } else {
     el.innerHTML = `
-      <div class="card-topline"><div class="card-cost">${def.cost}</div><div class="card-name">${def.name}</div></div>
+      <div class="card-topline"><div class="card-cost">${def.cost}</div><div class="card-name">${def.name}</div></div>${lvlBadge}
       <div class="card-art"><span class="card-glyph">${def.glyph}</span></div>
-      <div class="card-type">${def.school} · ${def.cat}</div>
+      <div class="card-type">${def.school} · ${catLabel}</div>
       <div class="card-text">${def.text}</div>
       <div class="card-tags">${def.tags.join(' · ')}</div>`;
   }
@@ -79,8 +161,9 @@ export function buildCardEl(def, size) {
 }
 
 function tooltipHTML(def) {
+  const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;
   return `<div class="tt-name" style="color:${SCHOOL_COLORS[def.school]}">${def.glyph} ${def.name}</div>
-    <div class="tt-type">${def.school} · ${def.cat} · ${def.rarity} · Flow ${def.cost} · Channel ${def.channel}s</div>
+    <div class="tt-type">${def.school} · ${catLabel} · ${def.rarity} · Flow ${def.cost} · Channel ${def.channel}s${def.dur ? ' · Active ' + def.dur + 's' : ''}</div>
     <div class="tt-text">${def.text}</div>
     <div class="tt-tags">${def.tags.join(' · ')}</div>`;
 }
@@ -113,6 +196,21 @@ export function updateUI(game) {
   els.flowText.textContent = `${Math.floor(eng.flow)} / ${eng.maxFlow}`;
   els.flowBar.classList.toggle('flow-full', eng.flow >= eng.maxFlow);
 
+  // class resource (Rage / Opportunity)
+  const res = (CLASSES[game.playerClass] || {}).resource;
+  if (res && game.state !== 'title') {
+    els.resWrap.classList.remove('hidden');
+    els.resLabel.textContent = res.name;
+    const val = res.key === 'rage' ? game.rage : game.opportunity;
+    els.resFill.style.width = `${(val / res.max) * 100}%`;
+    els.resFill.style.background = res.color;
+    els.resText.textContent = res.pips ? `${Math.floor(val)} / ${res.max}` : `${Math.floor(val)}`;
+  } else {
+    els.resWrap.classList.add('hidden');
+  }
+
+  updatePowerBadges(game);
+
   // combo
   if (eng.combo >= 2) {
     els.combo.classList.remove('hidden');
@@ -137,8 +235,8 @@ export function updateUI(game) {
     els.bannerTitle.textContent = '';
   }
 
-  // boss bar
-  const boss = game.enemies.find(e => e.def.boss);
+  // boss / rival duel bar
+  const boss = game.enemies.find(e => e.def.boss || e.def.rival);
   if (boss) {
     els.bossBar.classList.remove('hidden');
     els.bossName.textContent = boss.def.name;
@@ -151,13 +249,27 @@ export function updateUI(game) {
     els.stolen.textContent = `“${game.stolen.inst.def.name}” stolen — returns in ${Math.ceil(game.stolen.t)}s`;
   } else els.stolen.classList.add('hidden');
 
-  // channel progress ring (cheap, every frame)
+  // active cast: channel progress ring, sustained progress, card name
   const ch = eng.channel;
+  const sus = game.sustains[0];
   if (ch) {
     const prog = ch.dur > 0 ? Math.min(1, ch.t / ch.dur) : 1;
     els.channelSlot.style.setProperty('--prog', `${prog * 360}deg`);
     els.channelSlot.style.setProperty('--chcolor', colorOf(ch.inst.def));
+    els.activeName.textContent = ch.inst.def.name;
+    els.activeName.style.color = colorOf(ch.inst.def);
+    if (ch.inst.uid !== lastPopUid) { lastPopUid = ch.inst.uid; popCard(ch.inst.def); }
+  } else if (sus) {
+    const prog = 1 - Math.min(1, sus.t / sus.dur);
+    els.channelSlot.style.setProperty('--prog', `${prog * 360}deg`);
+    els.channelSlot.style.setProperty('--chcolor', sus.color);
+    els.activeName.textContent = sus.def.name;
+    els.activeName.style.color = sus.color;
+  } else {
+    els.activeName.textContent = '';
   }
+
+  els.goldChip.textContent = game.state === 'title' ? '' : `◈ ${game.gold}`;
 
   if (eng.uiDirty || game.uiDirty) {
     eng.uiDirty = false; game.uiDirty = false;
@@ -165,11 +277,57 @@ export function updateUI(game) {
     rebuildChips(game);
     rebuildRelics(game);
     syncOverlays(game);
+    syncSanctuary(game);
   }
+  if (game.state !== 'sanctuary' && !els.overlaySanct.classList.contains('hidden'))
+    els.overlaySanct.classList.add('hidden');
+  syncEncounterOverlay(game);
   if (game.state === 'gameover' || game.state === 'victory') syncEndOverlay(game);
+  else if (!els.overlayEnd.classList.contains('hidden') && game.state === 'combat') els.overlayEnd.classList.add('hidden');
 
-  // encounter labels
   els.encounter.textContent = game.stateLabel || '';
+}
+
+// ── active power badges: name + remaining duration bar ──
+function updatePowerBadges(game) {
+  const entries = game.engine.powers.slice();
+  if (game.dashOverride) {
+    const ov = game.dashOverride;
+    entries.push({ id: 'dash:' + ov.def.id, name: 'DASH — ' + ov.def.name, glyph: ov.def.glyph,
+      color: ov.color, timeLeft: ov.timeLeft, dur: ov.dur });
+  }
+  const sig = entries.map(pw => pw.id).join('|');
+  if (sig !== powersSig) {
+    powersSig = sig;
+    els.powers.innerHTML = '';
+    for (const pw of entries) {
+      const el = document.createElement('div');
+      el.className = 'power-badge';
+      el.dataset.id = pw.id;
+      el.style.setProperty('--c', pw.color);
+      el.innerHTML = `
+        <span class="pw-glyph">${pw.glyph}</span>
+        <span class="pw-name">${pw.name}</span>
+        <span class="pw-time"></span>
+        <div class="pw-bar"><div class="pw-fill"></div></div>`;
+      els.powers.appendChild(el);
+    }
+  }
+  for (const el of els.powers.children) {
+    const pw = entries.find(x => x.id === el.dataset.id);
+    if (!pw) continue;
+    el.querySelector('.pw-fill').style.width = `${Math.max(0, pw.timeLeft / pw.dur) * 100}%`;
+    el.querySelector('.pw-time').textContent = `${pw.timeLeft.toFixed(1)}s`;
+  }
+}
+
+// ── the card pop: every cast is announced, enlarged, readable ──
+function popCard(def) {
+  els.cardPop.innerHTML = '';
+  const el = buildCardEl(def, 'full');
+  el.classList.add('pop-in');
+  els.cardPop.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 1500);
 }
 
 function rebuildPipeline(game) {
@@ -181,10 +339,11 @@ function rebuildPipeline(game) {
   els.queueRow.innerHTML = '';
   const newKnown = new Set();
   eng.queue.forEach((inst, i) => {
-    const el = buildCardEl(inst.def, 'mini');
+    const el = buildCardEl(inst.def, 'mini', inst.lvl || 0);
     if (inst.cost !== inst.def.cost) el.querySelector('.card-cost').textContent = inst.cost;
-    if (i === 0 && !eng.canAfford(inst)) {
-      el.classList.add('starved');
+    if (i === 0) {
+      if (!eng.canAfford(inst)) el.classList.add('starved');
+      else el.classList.add('next-up');
     }
     if (!knownQueueUids.has(inst.uid)) el.classList.add('card-enter');
     attachTooltip(el, inst.def);
@@ -198,12 +357,13 @@ function rebuildPipeline(game) {
     els.queueRow.appendChild(ghost);
   }
 
-  // channel slot
+  // active slot: the channeling card, or the sustained cast
   els.channelSlot.innerHTML = '';
-  if (eng.channel) {
-    const el = buildCardEl(eng.channel.inst.def, 'mini');
+  const activeDef = eng.channel ? eng.channel.inst.def : (game.sustains[0] ? game.sustains[0].def : null);
+  if (activeDef) {
+    const el = buildCardEl(activeDef, 'mini');
     el.classList.add('channeling');
-    attachTooltip(el, eng.channel.inst.def);
+    attachTooltip(el, activeDef);
     els.channelSlot.appendChild(el);
     els.channelSlot.classList.add('active');
   } else {
@@ -252,11 +412,105 @@ function rebuildRelics(game) {
   }
 }
 
+// ── the rival encounter: featured cards + Fight / Party Up ──
+let encounterShown = false;
+function syncEncounterOverlay(game) {
+  const active = game.mm.state === 'choice' && game.rival;
+  if (active && !encounterShown) {
+    encounterShown = true;
+    const r = game.rival;
+    els.encName.innerHTML = `<span style="color:${r.color}">${r.name}</span>`;
+    els.encCards.innerHTML = '';
+    for (const def of r.featured) {
+      const el = buildCardEl(def, 'full');
+      attachTooltip(el, def);
+      els.encCards.appendChild(el);
+    }
+    els.overlayEncounter.classList.remove('hidden');
+  } else if (!active && encounterShown) {
+    encounterShown = false;
+    els.overlayEncounter.classList.add('hidden');
+  }
+}
+
+// ── the sanctuary: shop + deck table ──
+function syncSanctuary(game) {
+  const on = game.state === 'sanctuary' && game.sanctuary;
+  els.overlaySanct.classList.toggle('hidden', !on);
+  if (!on) return;
+  const s = game.sanctuary;
+  els.sanctGold.innerHTML = `◈ ${game.gold} gold`;
+  els.sanctDeckCount.textContent = `(${game.deckIds.length})`;
+
+  // merchant stock: a few seeded cards, gone once bought
+  els.shopStock.innerHTML = '';
+  if (!s.stock || s.stock.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sanct-empty';
+    empty.textContent = 'The merchant has nothing left to sell.';
+    els.shopStock.appendChild(empty);
+  }
+  (s.stock || []).forEach((def, idx) => {
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    const el = buildCardEl(def, 'mini');
+    attachTooltip(el, def);
+    const price = CARD_PRICES[def.rarity];
+    const btn = document.createElement('button');
+    btn.className = 'sanct-btn';
+    btn.textContent = `BUY ◈${price}`;
+    if (game.gold < price) btn.disabled = true;
+    btn.addEventListener('click', () => { buyCard(game, idx); });
+    const name = document.createElement('div');
+    name.className = 'shop-name';
+    name.textContent = def.name;
+    name.style.color = SCHOOL_COLORS[def.school];
+    row.appendChild(el); row.appendChild(name); row.appendChild(btn);
+    els.shopStock.appendChild(row);
+  });
+
+  // the deck, grouped: sell — or combine two duplicates into a stronger card
+  els.sanctDeck.innerHTML = '';
+  const groups = new Map();
+  for (const e of game.deckIds) {
+    const key = e.id + ':' + (e.lvl || 0);
+    groups.set(key, (groups.get(key) || 0) + 1);
+  }
+  for (const [key, count] of groups) {
+    const [id, lvlStr] = key.split(':');
+    const lvl = Number(lvlStr);
+    const def = CARDS[id];
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    const el = buildCardEl(def, 'mini', lvl);
+    attachTooltip(el, def);
+    const name = document.createElement('div');
+    name.className = 'shop-name';
+    name.innerHTML = `${def.name}${lvl > 0 ? ' <span class="lvl-note">Lv.' + lvl + '</span>' : ''}${count > 1 ? ' ×' + count : ''}`;
+    name.style.color = SCHOOL_COLORS[def.school];
+    row.appendChild(el); row.appendChild(name);
+    if (count >= 2 && lvl < MAX_CARD_LVL) {
+      const cb = document.createElement('button');
+      cb.className = 'sanct-btn combine';
+      cb.textContent = `COMBINE → Lv.${lvl + 1}`;
+      cb.addEventListener('click', () => { combineCards(game, id, lvl); });
+      row.appendChild(cb);
+    }
+    const sb = document.createElement('button');
+    sb.className = 'sanct-btn';
+    sb.textContent = `SELL ◈${sellPrice({ id, lvl })}`;
+    if (game.deckIds.length <= 6) sb.disabled = true;
+    sb.addEventListener('click', () => { sellCard(game, id, lvl); });
+    row.appendChild(sb);
+    els.sanctDeck.appendChild(row);
+  }
+}
+
 function syncOverlays(game) {
   if (game.state === 'reward' && game.pendingReward) {
     els.overlayReward.classList.remove('hidden');
-    els.rewardHeading.textContent = game.pendingReward.type === 'card'
-      ? 'Choose a card to bind into your deck' : 'Choose a relic';
+    els.rewardHeading.textContent = game.pendingReward.heading ||
+      (game.pendingReward.type === 'card' ? 'Choose a card to bind into your deck' : 'Choose a relic');
     els.rewardCards.innerHTML = '';
     for (const opt of game.pendingReward.options) {
       let el;
@@ -290,17 +544,16 @@ function syncOverlays(game) {
 function syncEndOverlay(game) {
   if (!els.overlayEnd.classList.contains('hidden')) return;
   els.overlayEnd.classList.remove('hidden');
-  const won = game.state === 'victory';
-  els.endTitle.textContent = won ? 'THE ARCHIVE FALLS SILENT' : 'THE DECK RUNS OUT';
-  els.endTitle.style.color = won ? '#ffd97a' : '#c23b4a';
-  els.endSub.textContent = won
-    ? 'The Gilded Librarian dissolves into loose pages. Your cards drift home.'
-    : 'Your story is reshuffled into the great deck. Draw again.';
+  els.endTitle.textContent = 'THE DECK RUNS OUT';
+  els.endTitle.style.color = '#c23b4a';
+  els.endSub.textContent = 'Your story is reshuffled into the great deck. Draw again.';
   const mins = Math.floor(game.runTime / 60), secs = Math.floor(game.runTime % 60);
   els.endStats.innerHTML = `
-    <span>☠ ${game.kills} enemies unmade</span>
-    <span>⎘ ${game.deckIds.length} cards bound</span>
+    <span>❂ world ${game.world}</span>
+    <span>☠ ${game.kills} unmade</span>
+    <span>⎘ ${game.deckIds.length} cards</span>
+    <span>♅ ${game.campsCleared} camps</span>
+    <span>☩ ${game.bossesSlain} bosses</span>
+    <span>⚔ ${game.duelsWon} duels</span>
     <span>⌛ ${mins}:${String(secs).padStart(2, '0')}</span>`;
 }
-
-export function setStateLabel(game, label) { game.stateLabel = label; }

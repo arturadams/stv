@@ -17,12 +17,17 @@
       <div id="hp-bar" class="bar"><div id="hp-fill"></div><span id="hp-text" class="bar-text"></span></div>
       <div class="bar-label">FLOW</div>
       <div id="flow-bar" class="bar"><div id="flow-fill"></div><span id="flow-text" class="bar-text"></span></div>
+      <div id="res-wrap" class="hidden">
+        <div class="bar-label" id="res-label"></div>
+        <div id="res-bar" class="bar"><div id="res-fill"></div><span id="res-text" class="bar-text"></span></div>
+      </div>
       <div id="armor-chip"></div>
+      <div id="powers"></div>
       <div id="chips"></div>
     </div>
     <div id="topright">
       <div id="encounter-label"></div>
-      <div id="wave-label"></div>
+      <div id="gold-chip"></div>
       <div id="relics"></div>
     </div>
     <div id="combo" class="hidden"></div>
@@ -37,7 +42,10 @@
     </div>
     <div id="pause-note" class="hidden">PAUSED — press P to resume</div>
 
-    <!-- the card pipeline: Deck → Queue → Channel → Discard -->
+    <!-- the enlarged pop of whatever card just started casting -->
+    <div id="card-pop"></div>
+
+    <!-- the card pipeline: Deck → Queue → Active → Discard -->
     <div id="pipeline">
       <div class="pile" id="deck-pile">
         <div class="pile-card"><span class="pile-glyph">⎘</span><span id="deck-count">0</span></div>
@@ -51,7 +59,8 @@
       <div class="pipe-arrow">❯</div>
       <div id="channel-wrap">
         <div id="channel-slot"></div>
-        <div class="pile-label">CHANNEL</div>
+        <div class="pile-label">ACTIVE</div>
+        <div id="active-name"></div>
       </div>
       <div class="pipe-arrow">❯</div>
       <div class="pile" id="discard-pile">
@@ -63,19 +72,75 @@
 
   <div id="tooltip" class="hidden"></div>
 
-  <!-- Title -->
+  <!-- Title + class selection -->
   <div id="title-overlay" class="overlay">
     <div class="title-frame">
       <div class="title-sigil">✦</div>
       <h1>ARCANA&nbsp;ENGINE</h1>
-      <p class="title-tag">Your deck is alive. Your cards become reality.<br/>Survive inside the magical machine you built.</p>
+      <p class="title-tag">An endless cursed realm. Your hero fights on their own —<br/>
+      your deck transforms <i>how</i>. Cards are events, not bullets.</p>
+      <div id="class-row"></div>
       <div class="title-rules">
         <span><b>WASD</b> move</span><span><b>SPACE</b> dash</span>
         <span><b>P</b> pause</span><span><b>M</b> mute</span>
       </div>
-      <p class="title-hint">The engine draws, channels and resolves your cards on its own.<br/>
-      You control position. Lure enemies into the circles before they complete.</p>
+      <p class="title-hint">The engine draws, channels and resolves your cards on its own.
+      Powers transform your basic attack; mobility cards take over your Dash;
+      big spells channel over ritual circles — lure enemies in.<br/>
+      Sometimes another soul is found in the wild: read their cards, then duel or party up.</p>
       <button id="start-btn">BEGIN THE RITUAL</button>
+    </div>
+  </div>
+
+  <!-- Run setup: see your rolled starting cards, choose a world -->
+  <div id="setup-overlay" class="overlay hidden">
+    <div class="reward-frame setup-frame">
+      <div class="reward-sigil">⎘</div>
+      <h2>PREPARE THE RITUAL</h2>
+      <div id="setup-class"></div>
+      <div class="sanct-h setup-h">CHOOSE A WORLD</div>
+      <div id="world-row"></div>
+      <div class="sanct-h setup-h">YOUR STARTING CARDS — 9 common, 1 uncommon</div>
+      <div id="start-cards"></div>
+      <div id="setup-buttons">
+        <button id="reroll-btn">↺ REROLL</button>
+        <button id="enter-btn">ENTER THE REALM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rival encounter: Fight or Party Up -->
+  <div id="encounter-overlay" class="overlay hidden">
+    <div class="reward-frame">
+      <div class="reward-sigil">⚔</div>
+      <h2>A RIVAL SOUL APPROACHES</h2>
+      <div id="enc-name"></div>
+      <p class="title-hint">Their featured cards reveal their build. Choose.</p>
+      <div id="enc-cards"></div>
+      <div id="enc-buttons">
+        <button id="fight-btn">FIGHT</button>
+        <button id="party-btn">PARTY UP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sanctuary: rest, shop, combine -->
+  <div id="sanctuary-overlay" class="overlay hidden">
+    <div class="reward-frame sanct-frame">
+      <div class="reward-sigil">⌂</div>
+      <h2>SANCTUARY</h2>
+      <div id="sanct-gold"></div>
+      <div id="sanct-cols">
+        <div class="sanct-col">
+          <h3 class="sanct-h">WANDERING MERCHANT</h3>
+          <div id="shop-stock"></div>
+        </div>
+        <div class="sanct-col">
+          <h3 class="sanct-h">YOUR DECK <span id="sanct-deck-count"></span></h3>
+          <div id="sanct-deck"></div>
+        </div>
+      </div>
+      <button id="leave-btn">RETURN TO THE REALM</button>
     </div>
   </div>
 
@@ -85,11 +150,11 @@
       <div class="reward-sigil">☩</div>
       <h2 id="reward-heading"></h2>
       <div id="reward-cards"></div>
-      <button id="reward-skip">Decline — rest instead (+20 vitality)</button>
+      <button id="reward-skip">Decline — rest instead (+15 vitality)</button>
     </div>
   </div>
 
-  <!-- Death / victory -->
+  <!-- Death -->
   <div id="end-overlay" class="overlay hidden">
     <div class="title-frame">
       <h1 id="end-title"></h1>

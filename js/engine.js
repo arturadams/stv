@@ -1,10 +1,14 @@
 // ── Arcana Engine · card pipeline ──────────────────────────────────────────
-// Deck → Draw → Queue → Channel → Resolve → Discard → Shuffle
+// Deck → Draw → Queue → Channel → Resolve / Stay Active → Discard → Shuffle
 // The engine is automatic; the player never casts manually. World-facing
 // behavior (spawning projectiles, enchant actions, previews) is delegated
 // through callbacks set by world.js so this file stays DOM- and canvas-free.
+//
+// Rhythm rules (see roadmap.md): cards take real time — channels are long,
+// Powers stay active for seconds, sustained casts block the pipeline, and a
+// short gap follows every resolve so the queue visibly accumulates.
 
-import { CARDS } from './data.js';
+import { CARDS, ELEMENT_COLORS, SCHOOL_COLORS } from './data.js';
 
 export class EventBus {
   constructor() { this.map = new Map(); }
@@ -19,11 +23,15 @@ export class EventBus {
 }
 
 let UID = 1;
-export function makeCard(id) {
+// Cards carry a level: duplicates combined at a Sanctuary grow stronger.
+export function makeCard(id, lvl = 0) {
   const def = CARDS[id];
   if (!def) throw new Error('unknown card: ' + id);
-  return { uid: UID++, def, cost: def.cost };
+  return { uid: UID++, def, cost: def.cost, lvl };
 }
+
+const ENCHANT_EVENTS = ['statusApplied', 'enemyKilled', 'perfectDodge', 'queueEmpty',
+  'playerHit', 'cardResolved', 'powerExpired', 'trapTriggered'];
 
 export class CardEngine {
   constructor(bus) {
@@ -31,29 +39,35 @@ export class CardEngine {
     this.deck = []; this.discard = []; this.queue = [];
     this.channel = null;           // {inst, t, dur, buffs, cost, preview}
     this.flow = 4; this.maxFlow = 10;
-    this.drawInterval = 0.85; this.drawTimer = 0.4; this.queueCap = 6;
+    this.drawInterval = 1.0; this.drawTimer = 0.5; this.queueCap = 6;
+    this.gapT = 0;                 // readability breath after each resolve
     this.modStack = [];            // pending modifiers: {name, glyph, color, match, count, buff}
     this.enchants = [];            // active triggers: {name, glyph, color, timeLeft, on, filter, chance, do, relic}
+    this.powers = [];              // ACTIVE powers: {id, name, glyph, color, school, timeLeft, dur, spec}
     this.flowJobs = [];            // battery-style flow over time
+    this.flushMode = null;         // {charges, costMult} — queued cards channel at 3× speed
     this.hasteMult = 1; this.hasteTimer = 0;
     this.nextChannelMult = 1;      // one-shot channel haste (Assassin's Needle etc.)
     this.channelMultGlobal = 1;    // relic stat (Cracked Hourglass)
+    this.powerDurMult = 1;         // relic stat (Eternal Sigil)
+    this.sustainedActive = false;  // set by world.js while a sustained cast runs
     this.lastResolvedId = null;
     this.combo = 0; this.comboTimer = 0;
     this.uiDirty = true;
     // set by world.js:
-    this.resolveCard = null;       // (inst, buffs) => void
+    this.resolveCard = null;       // (inst, buffs, preview, i) => void
     this.computePreview = null;    // (def, buffs) => preview | null
-    this.runEnchantAction = null;  // (doSpec, payload, label) => void
+    this.runEnchantAction = null;  // (doSpec, payload, ench) => void
+    this.classChannelMult = null;  // (def) => mult — Rage / Opportunity hook
     const dispatch = (ev) => (p) => this.dispatchEnchants(ev, p);
-    for (const ev of ['statusApplied', 'enemyKilled', 'perfectDodge', 'queueEmpty', 'playerHit', 'cardResolved'])
-      bus.on(ev, dispatch(ev));
+    for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }
 
-  setDeck(ids) {
-    this.deck = ids.map(makeCard);
+  setDeck(entries) {
+    this.deck = entries.map(e => typeof e === 'string' ? makeCard(e) : makeCard(e.id, e.lvl || 0));
     this.shuffleArray(this.deck);
     this.discard = []; this.queue = []; this.channel = null;
+    this.powers = []; this.flushMode = null; this.gapT = 0;
     this.uiDirty = true;
   }
 
@@ -117,16 +131,19 @@ export class CardEngine {
     const inst = this.queue[0];
     const def = inst.def;
     const buffs = this.collectBuffs(def);
-    const cost = this.effectiveCost(inst, buffs);
-    if (this.flow < cost) {
-      // Not enough Flow: un-consume nothing (buffs already taken) would be
-      // unfair, so we only collect buffs when the cast is certain. Re-check
-      // cost with a dry run first — see update() which calls canAfford().
-      return false;
+    let cost = this.effectiveCost(inst, buffs);
+    let flushSpeed = 1;
+    if (this.flushMode && this.flushMode.charges > 0) {
+      cost = Math.max(0, Math.ceil(cost * this.flushMode.costMult));
+      flushSpeed = 0.35;
+      this.flushMode.charges -= 1;
+      if (this.flushMode.charges <= 0) this.flushMode = null;
     }
+    if (this.flow < cost) return false; // canAfford() pre-checked; still guard
     this.flow -= cost;
     this.queue.shift();
-    let dur = def.channel * buffs.channelMult * this.channelMultGlobal * this.nextChannelMult;
+    let dur = def.channel * buffs.channelMult * this.channelMultGlobal * this.nextChannelMult * flushSpeed;
+    if (this.classChannelMult) dur *= this.classChannelMult(def);
     this.nextChannelMult = 1;
     dur = Math.max(0, dur);
     const preview = this.computePreview ? this.computePreview(def, buffs) : null;
@@ -146,6 +163,7 @@ export class CardEngine {
       if (mt.tags && !mt.tags.some(t => def.tags.includes(t))) continue;
       if (m.buff.costMult != null) costMult *= m.buff.costMult;
     }
+    if (this.flushMode && this.flushMode.charges > 0) costMult *= this.flushMode.costMult;
     return this.flow >= Math.max(0, Math.ceil(inst.cost * costMult));
   }
 
@@ -161,45 +179,77 @@ export class CardEngine {
       if (this.resolveCard) this.resolveCard(inst, buffs, preview, i);
     }
     this.lastResolvedId = inst.def.id;
+    this.lastResolvedLvl = inst.lvl || 0;
     this.discard.push(inst);
+    this.gapT = 0.55; // the breath: let the player read what just happened
     this.uiDirty = true;
-    // combo chain: resolves within 3s of each other build combo
+    // combo chain: resolves within 4s of each other build combo
     this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
-    this.comboTimer = 3;
+    this.comboTimer = 4;
     if (this.combo > 1 && this.combo % 5 === 0) this.gainFlow(2, 'combo');
     this.bus.emit('comboChanged', { combo: this.combo });
     this.bus.emit('cardResolved', { inst, buffs });
     if (this.queue.length === 0 && !this.channel) this.bus.emit('queueEmpty', {});
   }
 
-  // Resolve queued cards immediately, front to back, while Flow lasts.
-  flush(costMult = 1) {
-    let guard = 24; // hard cap; Flush can never resolve infinite cards
-    while (this.queue.length > 0 && guard-- > 0) {
-      const inst = this.queue[0];
-      const buffs = this.collectBuffs(inst.def);
-      const cost = Math.max(0, Math.ceil(this.effectiveCost(inst, buffs) * costMult));
-      if (this.flow < cost) break;
-      this.flow -= cost;
-      this.queue.shift();
-      const preview = this.computePreview ? this.computePreview(inst.def, buffs) : null;
-      this.doResolve(inst, buffs, preview);
-    }
+  // ── Powers: cards that stay active, modifying the basic attack ──
+  addPower(def, eff, durMult = 1) {
+    const dur = (eff.dur || 6) * this.powerDurMult * durMult;
+    // re-applying the same power refreshes it instead of stacking
+    const existing = this.powers.find(pw => pw.id === def.id);
+    if (existing) { existing.timeLeft = dur; existing.dur = dur; this.uiDirty = true; return; }
+    this.powers.push({
+      id: def.id, name: def.name, glyph: def.glyph,
+      color: ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school],
+      school: def.school, timeLeft: dur, dur, spec: eff.power || {},
+    });
+    this.bus.emit('powerGained', { id: def.id, school: def.school });
     this.uiDirty = true;
+  }
+
+  extendPowers(sec) {
+    for (const pw of this.powers) { pw.timeLeft += sec; pw.dur += sec; }
+    this.uiDirty = true;
+  }
+
+  // Merge every active power's basic-attack modifications.
+  basicMods() {
+    const m = { override: null, addStatus: [], arcMult: 1, dmgMult: 1, rateMult: 1, extraEvery: 0 };
+    for (const pw of this.powers) {
+      const s = pw.spec;
+      if (s.basicOverride) m.override = s.basicOverride;
+      if (s.addStatus) m.addStatus.push(s.addStatus);
+      if (s.arcMult) m.arcMult *= s.arcMult;
+      if (s.dmgMult) m.dmgMult *= s.dmgMult;
+      if (s.rateMult) m.rateMult *= s.rateMult;
+      if (s.extraEvery) m.extraEvery = s.extraEvery;
+    }
+    return m;
+  }
+
+  powerChannelMult() {
+    let mult = 1;
+    for (const pw of this.powers) if (pw.spec.channelMult) mult *= pw.spec.channelMult;
+    return mult;
   }
 
   queueOp(op, params = {}) {
     switch (op) {
       case 'duplicateNext': {
         const next = this.queue[0];
-        if (next) this.queue.splice(1, 0, { uid: UID++, def: next.def, cost: next.cost, copy: true });
+        if (next) this.queue.splice(1, 0, { uid: UID++, def: next.def, cost: next.cost + 1, lvl: next.lvl || 0, copy: true });
         break;
       }
       case 'reverse': this.queue.reverse(); break;
-      case 'flush': this.flush(params.costMult ?? 1); break;
+      case 'flush':
+        // Fast-forward, not teleport: queued cards still channel (at 3× speed)
+        // and still pay Flow — channel rules and readability are preserved.
+        if (this.queue.length > 0)
+          this.flushMode = { charges: this.queue.length, costMult: params.costMult ?? 1 };
+        break;
       case 'echoLast': {
         if (this.lastResolvedId) {
-          const inst = makeCard(this.lastResolvedId);
+          const inst = makeCard(this.lastResolvedId, this.lastResolvedLvl || 0);
           inst.cost += 1;
           this.queue.push(inst);
           this.bus.emit('cardQueued', { inst });
@@ -246,6 +296,7 @@ export class CardEngine {
       if (e.filter) {
         if (e.filter.status && payload.status !== e.filter.status) continue;
         if (e.filter.hasStatus && !(payload.enemy && payload.enemy.statuses[e.filter.hasStatus])) continue;
+        if (e.filter.school && payload.school !== e.filter.school) continue;
       }
       if (e.chance < 1 && Math.random() > e.chance) continue;
       if (this.runEnchantAction) this.runEnchantAction(e.do, payload, e);
@@ -256,12 +307,22 @@ export class CardEngine {
     // timers
     if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.combo = 0; this.bus.emit('comboChanged', { combo: 0 }); } }
     if (this.hasteTimer > 0) { this.hasteTimer -= dt; if (this.hasteTimer <= 0) this.hasteMult = 1; }
+    if (this.gapT > 0) this.gapT -= dt;
     for (const j of this.flowJobs) {
       const give = Math.min(dt / j.dur * j.amount, j.remaining);
       j.acc = (j.acc || 0) + give; j.remaining -= give;
       if (j.acc >= 1) { const whole = Math.floor(j.acc); j.acc -= whole; this.gainFlow(whole, 'battery'); }
     }
     this.flowJobs = this.flowJobs.filter(j => j.remaining > 0.01);
+
+    // active powers tick down; expiry is an event (Elemental Cycle listens)
+    let powerExpired = false;
+    for (const pw of this.powers) {
+      pw.timeLeft -= dt;
+      if (pw.timeLeft <= 0) { powerExpired = true; this.bus.emit('powerExpired', { id: pw.id, school: pw.school }); }
+    }
+    if (powerExpired) { this.powers = this.powers.filter(pw => pw.timeLeft > 0); this.uiDirty = true; }
+
     let expired = false;
     for (const e of this.enchants) { if (e.timeLeft !== Infinity) { e.timeLeft -= dt; if (e.timeLeft <= 0) expired = true; } }
     if (expired) { this.enchants = this.enchants.filter(e => e.timeLeft > 0 || e.timeLeft === Infinity); this.uiDirty = true; }
@@ -273,12 +334,13 @@ export class CardEngine {
       this.drawCard();
     }
 
-    // channel pipeline
-    if (!this.channel && this.queue.length > 0 && this.canAfford(this.queue[0])) {
+    // channel pipeline — waits for the gap and for sustained casts to finish
+    if (!this.channel && !this.sustainedActive && this.gapT <= 0 &&
+        this.queue.length > 0 && this.canAfford(this.queue[0])) {
       this.startChannel();
     }
     if (this.channel) {
-      this.channel.t += dt * this.hasteMult;
+      this.channel.t += dt * this.hasteMult * (1 / this.powerChannelMult());
       // self-centered previews follow the player
       if (this.channel.preview && this.channel.preview.follow && this.followPos) {
         this.channel.preview.x = this.followPos.x;

@@ -3,7 +3,6 @@ import { createGame, updateGame } from './world.js';
 import { render } from './render.js';
 import { initUI, updateUI } from './ui.js';
 import { initAudio, toggleMute } from './audio.js';
-import { ENCOUNTERS } from './data.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -40,7 +39,10 @@ window.addEventListener('keydown', (e) => {
     if (game.state === 'combat') { paused = !paused; document.getElementById('pause-note').classList.toggle('hidden', !paused); }
   }
   if (e.code === 'KeyM') toggleMute();
-  if (e.code === 'Enter' && game.state === 'title') document.getElementById('start-btn').click();
+  if (e.code === 'Enter' && game.state === 'title') {
+    const setupOpen = !document.getElementById('setup-overlay').classList.contains('hidden');
+    document.getElementById(setupOpen ? 'enter-btn' : 'start-btn').click();
+  }
 });
 window.addEventListener('keyup', (e) => {
   const k = KEYMAP[e.code];
@@ -56,13 +58,6 @@ function frame(now) {
   dt = Math.min(dt, 0.05); // clamp tab-switch spikes
 
   if (!paused) updateGame(game, dt, input);
-
-  // HUD label: encounter + wave
-  if (game.state === 'combat' || game.state === 'reward') {
-    const enc = ENCOUNTERS[Math.min(game.encounterIdx, ENCOUNTERS.length - 1)];
-    game.stateLabel = enc.boss ? `${enc.name}` :
-      `${enc.name} — Wave ${Math.max(1, game.waveIdx + 1)} / ${enc.waves.length}`;
-  } else game.stateLabel = '';
 
   render(game, ctx, window.innerWidth, window.innerHeight);
   updateUI(game);

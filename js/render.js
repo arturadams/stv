@@ -1,132 +1,99 @@
 // ── Arcana Engine · canvas renderer ────────────────────────────────────────
-// Dark arcane fantasy: parchment, ink, gold foil, constellations, ritual circles.
+// Dark arcane fantasy: parchment, ink, gold foil, ritual circles — now painted
+// over an infinite chunk-generated realm.
 
-import { ARENA } from './world.js';
-import { ELEMENT_COLORS } from './data.js';
-
-const MARGIN = 420; // void border drawn around the arena
-let floorCanvas = null;
+import { CHUNK, getChunk, colorOf, worldDef } from './world.js';
+import { ELEMENT_COLORS, SCHOOL_COLORS, CLASSES } from './data.js';
 
 const RUNE_GLYPHS = '✦✧☽☾♁♆⚶⚸☿♄✺❖'.split('');
 
-function makeFloor() {
+// ── chunk floor cache ──
+const chunkCanvases = new Map(); // key -> canvas
+const CHUNK_CACHE_MAX = 90;
+
+function tileHash(x, y, seed) {
+  let h = (x | 0) * 73856093 ^ (y | 0) * 19349663 ^ (seed | 0) * 83492791;
+  h = (h ^ (h >> 13)) * 1274126177;
+  return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+}
+
+function makeChunkCanvas(game, ch) {
   const c = document.createElement('canvas');
-  c.width = ARENA.w + MARGIN * 2; c.height = ARENA.h + MARGIN * 2;
+  c.width = CHUNK; c.height = CHUNK;
   const g = c.getContext('2d');
-  g.translate(MARGIN, MARGIN);
+  const b = ch.biome;
+  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
 
-  // astral void + constellations
-  g.fillStyle = '#05060f';
-  g.fillRect(-MARGIN, -MARGIN, c.width, c.height);
-  for (let i = 0; i < 420; i++) {
-    const x = Math.random() * c.width - MARGIN, y = Math.random() * c.height - MARGIN;
-    if (x > -30 && x < ARENA.w + 30 && y > -30 && y < ARENA.h + 30) continue;
-    const s = Math.random();
-    g.fillStyle = `rgba(${180 + s * 60}, ${190 + s * 50}, 255, ${0.25 + s * 0.55})`;
-    g.fillRect(x, y, s < 0.9 ? 1.5 : 2.5, s < 0.9 ? 1.5 : 2.5);
-  }
-  // floating bookshelf silhouettes in the void
-  for (let i = 0; i < 14; i++) {
-    const edge = i % 4;
-    let x, y;
-    if (edge === 0) { x = Math.random() * ARENA.w; y = -MARGIN * (0.3 + Math.random() * 0.5); }
-    else if (edge === 1) { x = Math.random() * ARENA.w; y = ARENA.h + MARGIN * (0.25 + Math.random() * 0.5); }
-    else if (edge === 2) { x = -MARGIN * (0.3 + Math.random() * 0.55); y = Math.random() * ARENA.h; }
-    else { x = ARENA.w + MARGIN * (0.25 + Math.random() * 0.55); y = Math.random() * ARENA.h; }
-    const w = 90 + Math.random() * 120, h = 130 + Math.random() * 160;
-    g.save(); g.translate(x, y); g.rotate((Math.random() - 0.5) * 0.35);
-    g.fillStyle = '#0d0f1e'; g.fillRect(-w / 2, -h / 2, w, h);
-    g.strokeStyle = 'rgba(217,180,91,0.18)'; g.lineWidth = 2; g.strokeRect(-w / 2, -h / 2, w, h);
-    for (let s = 0; s < 3; s++) {
-      const sy = -h / 2 + (s + 1) * h / 4;
-      g.strokeStyle = 'rgba(217,180,91,0.12)'; g.beginPath(); g.moveTo(-w / 2, sy); g.lineTo(w / 2, sy); g.stroke();
-      let bx = -w / 2 + 6;
-      while (bx < w / 2 - 8) {
-        const bw = 5 + Math.random() * 9, bh = 14 + Math.random() * 9;
-        const hues = ['#1c2440', '#31203a', '#3a2a1c', '#20303a', '#2b1e2e'];
-        g.fillStyle = hues[(Math.random() * hues.length) | 0];
-        g.fillRect(bx, sy - bh, bw, bh);
-        bx += bw + 2;
-      }
-    }
-    g.restore();
-  }
-
-  // marble floor
-  g.fillStyle = '#11142a';
-  g.fillRect(0, 0, ARENA.w, ARENA.h);
-  const tile = 110;
-  for (let ty = 0; ty < ARENA.h / tile; ty++) {
-    for (let tx = 0; tx < ARENA.w / tile; tx++) {
-      const v = Math.random();
-      g.fillStyle = `rgba(${20 + v * 14}, ${22 + v * 13}, ${52 + v * 16}, 1)`;
+  g.fillStyle = `rgb(${fr},${fg},${fb})`;
+  g.fillRect(0, 0, CHUNK, CHUNK);
+  const tile = 112;
+  const tx0 = ch.cx * CHUNK / tile, ty0 = ch.cy * CHUNK / tile;
+  for (let ty = 0; ty < CHUNK / tile; ty++) {
+    for (let tx = 0; tx < CHUNK / tile; tx++) {
+      const v = tileHash(tx0 + tx, ty0 + ty, game.worldSeed);
+      g.fillStyle = `rgb(${fr + v * vr | 0}, ${fg + v * vg | 0}, ${fb + v * vb | 0})`;
       g.fillRect(tx * tile + 1.5, ty * tile + 1.5, tile - 3, tile - 3);
-      if (Math.random() < 0.13) { // broken tile
-        g.fillStyle = 'rgba(4,5,12,0.55)';
+      if (tileHash(tx0 + tx, ty0 + ty, game.worldSeed + 5) < 0.12) { // broken tile
+        g.fillStyle = 'rgba(4,5,12,0.5)';
         g.fillRect(tx * tile + 1.5, ty * tile + 1.5, tile - 3, tile - 3);
-        g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1.5;
-        g.beginPath();
-        let cx = tx * tile + Math.random() * tile, cy = ty * tile;
-        g.moveTo(cx, cy);
-        for (let k = 0; k < 4; k++) { cx += (Math.random() - 0.5) * 50; cy += tile / 4; g.lineTo(cx, cy); }
-        g.stroke();
       }
     }
   }
   // grout
-  g.strokeStyle = 'rgba(5,6,15,0.85)'; g.lineWidth = 3;
-  for (let x = 0; x <= ARENA.w; x += tile) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, ARENA.h); g.stroke(); }
-  for (let y = 0; y <= ARENA.h; y += tile) { g.beginPath(); g.moveTo(0, y); g.lineTo(ARENA.w, y); g.stroke(); }
+  g.strokeStyle = b.grout; g.lineWidth = 3;
+  for (let x = 0; x <= CHUNK; x += tile) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, CHUNK); g.stroke(); }
+  for (let y = 0; y <= CHUNK; y += tile) { g.beginPath(); g.moveTo(0, y); g.lineTo(CHUNK, y); g.stroke(); }
 
-  // central ritual circle in worn gold
-  const cx = ARENA.w / 2, cy = ARENA.h / 2;
-  g.strokeStyle = 'rgba(217,180,91,0.16)';
-  for (const [r, w] of [[420, 5], [385, 2], [255, 3], [140, 2]]) {
-    g.lineWidth = w; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
-  }
-  g.fillStyle = 'rgba(217,180,91,0.2)';
-  g.font = '28px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2;
-    g.save(); g.translate(cx + Math.cos(a) * 320, cy + Math.sin(a) * 320); g.rotate(a + Math.PI / 2);
-    g.fillText(RUNE_GLYPHS[i % RUNE_GLYPHS.length], 0, 0);
+  const bx = ch.cx * CHUNK, by = ch.cy * CHUNK;
+  // scattered deco: torn cards & worn runes
+  for (const d of ch.deco) {
+    g.save(); g.translate(d.x - bx, d.y - by); g.rotate(d.rot);
+    if (d.kind === 'card') {
+      g.fillStyle = 'rgba(210,196,160,0.10)';
+      g.fillRect(-11, -16, 22, 32);
+      g.strokeStyle = 'rgba(217,180,91,0.12)'; g.lineWidth = 1; g.strokeRect(-11, -16, 22, 32);
+      g.fillStyle = 'rgba(217,180,91,0.14)'; g.font = '13px Georgia, serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(b.deco[d.g % b.deco.length], 0, 2);
+    } else {
+      g.fillStyle = hexA(b.accent, 0.10); g.font = '22px Georgia, serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(b.deco[d.g % b.deco.length], 0, 0);
+    }
     g.restore();
   }
-  // connecting star lines
-  g.strokeStyle = 'rgba(217,180,91,0.08)'; g.lineWidth = 2;
-  g.beginPath();
-  for (let i = 0; i <= 7; i++) {
-    const a = (i * 3 / 7) * Math.PI * 2 - Math.PI / 2;
-    const px = cx + Math.cos(a) * 255, py = cy + Math.sin(a) * 255;
-    if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
-  }
-  g.stroke();
-
-  // torn cards scattered on the floor
-  for (let i = 0; i < 26; i++) {
-    const x = 60 + Math.random() * (ARENA.w - 120), y = 60 + Math.random() * (ARENA.h - 120);
-    g.save(); g.translate(x, y); g.rotate(Math.random() * Math.PI * 2);
-    g.fillStyle = 'rgba(210,196,160,0.10)';
-    g.fillRect(-11, -16, 22, 32);
-    g.strokeStyle = 'rgba(217,180,91,0.12)'; g.lineWidth = 1; g.strokeRect(-11, -16, 22, 32);
-    g.fillStyle = 'rgba(217,180,91,0.14)'; g.font = '13px Georgia, serif';
-    g.fillText(RUNE_GLYPHS[(Math.random() * RUNE_GLYPHS.length) | 0], 0, 2);
+  // hazard pools baked into the floor
+  for (const p of ch.pools) {
+    g.save();
+    g.fillStyle = b.hazard;
+    g.beginPath(); g.ellipse(p.x - bx, p.y - by, p.r, p.r * 0.82, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = b.hazardEdge; g.lineWidth = 2;
+    g.beginPath(); g.ellipse(p.x - bx, p.y - by, p.r, p.r * 0.82, 0, 0, Math.PI * 2); g.stroke();
     g.restore();
   }
+  return c;
+}
 
-  // arena border: gold trim over the void edge
-  g.strokeStyle = 'rgba(217,180,91,0.45)'; g.lineWidth = 4; g.strokeRect(0, 0, ARENA.w, ARENA.h);
-  g.strokeStyle = 'rgba(217,180,91,0.18)'; g.lineWidth = 12; g.strokeRect(-10, -10, ARENA.w + 20, ARENA.h + 20);
+function chunkCanvasFor(game, ch) {
+  const key = ch.cx + ',' + ch.cy + ':' + game.worldSeed;
+  let c = chunkCanvases.get(key);
+  if (!c) {
+    c = makeChunkCanvas(game, ch);
+    chunkCanvases.set(key, c);
+    if (chunkCanvases.size > CHUNK_CACHE_MAX) {
+      const first = chunkCanvases.keys().next().value;
+      chunkCanvases.delete(first);
+    }
+  }
   return c;
 }
 
 export function render(game, ctx, W, H) {
-  if (!floorCanvas) floorCanvas = makeFloor();
   const t = game.time;
   const cam = game.camera;
   const scale = Math.max(0.72, Math.min(1.25, Math.min(W / 1350, H / 880)));
 
-  ctx.fillStyle = '#05060f';
+  ctx.fillStyle = worldDef(game).sky;
   ctx.fillRect(0, 0, W, H);
   ctx.save();
   const shx = (Math.random() - 0.5) * cam.shake, shy = (Math.random() - 0.5) * cam.shake;
@@ -134,16 +101,30 @@ export function render(game, ctx, W, H) {
   ctx.scale(scale, scale);
   ctx.translate(-cam.x, -cam.y);
 
-  // floor
-  ctx.drawImage(floorCanvas, -MARGIN, -MARGIN);
+  // visible chunk range
+  const halfW = W / 2 / scale + CHUNK, halfH = H / 2 / scale + CHUNK;
+  const cx0 = Math.floor((cam.x - halfW) / CHUNK), cx1 = Math.floor((cam.x + halfW) / CHUNK);
+  const cy0 = Math.floor((cam.y - halfH) / CHUNK), cy1 = Math.floor((cam.y + halfH) / CHUNK);
+  const visible = [];
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const ch = getChunk(game, cx, cy);
+      visible.push(ch);
+      ctx.drawImage(chunkCanvasFor(game, ch), cx * CHUNK, cy * CHUNK);
+    }
+  }
 
-  drawArenaLife(game, ctx, t);
+  for (const ch of visible) drawChunkLife(game, ctx, ch, t);
+  drawRegionBoundary(game, ctx, t);
   for (const z of game.zones) drawZone(ctx, z, t);
+  for (const tr of game.traps) drawTrap(ctx, tr, t);
   for (const tg of game.telegraphs) drawTelegraph(ctx, tg, t);
   drawChannelPreview(game, ctx, t);
   for (const pk of game.pickups) drawPickup(ctx, pk, t);
   for (const e of game.enemies) drawEnemy(ctx, e, t);
   for (const s of game.summons) drawSummon(ctx, s, t);
+  if (game.ally) drawCompanion(ctx, game.ally, t, true);
+  if (game.rival) drawCompanion(ctx, game.rival, t, false);
   drawPlayer(game, ctx, t);
   for (const pr of game.enemyProjectiles) drawEnemyProj(ctx, pr, t);
   for (const pr of game.projectiles) drawProj(ctx, pr, t);
@@ -152,23 +133,14 @@ export function render(game, ctx, W, H) {
   for (const f of game.floaters) drawFloater(ctx, f);
 
   ctx.restore();
+
+  drawCompass(game, ctx, W, H, scale);
 }
 
-function drawArenaLife(game, ctx, t) {
-  const a = game.arena;
-  // ink pools: dark, glossy, slow-swirling
-  for (const p of a.inkPools) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(8,6,18,0.92)';
-    ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(143,111,255,0.25)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r, p.r * 0.82, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(143,111,255,0.14)';
-    ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r * 0.62, p.r * 0.5, t * 0.2, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
-  }
+// ── living features per chunk ──
+function drawChunkLife(game, ctx, ch, t) {
   // pillars
-  for (const pil of a.pillars) {
+  for (const pil of ch.pillars) {
     ctx.fillStyle = '#0a0c1c';
     ctx.beginPath(); ctx.ellipse(pil.x, pil.y + 8, pil.r * 1.1, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
     const gr = ctx.createLinearGradient(pil.x - pil.r, pil.y, pil.x + pil.r, pil.y);
@@ -177,11 +149,10 @@ function drawArenaLife(game, ctx, t) {
     ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(217,180,91,0.3)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(217,180,91,0.12)';
-    ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r - 7, 0, Math.PI * 2); ctx.stroke();
   }
   // shrines
-  for (const sh of a.shrines) {
+  if (ch.shrine) {
+    const sh = ch.shrine;
     const ready = sh.cd <= 0;
     const pulse = ready ? 0.5 + Math.sin(t * 3) * 0.25 : 0.12;
     ctx.save();
@@ -195,8 +166,8 @@ function drawArenaLife(game, ctx, t) {
     ctx.restore();
     if (ready) glow(ctx, sh.x, sh.y, 46, 'rgba(143,216,255,0.16)');
   }
-  // candles: flickering warm light
-  for (const cd of a.candles) {
+  // candles
+  for (const cd of ch.candles) {
     const fl = 0.75 + Math.sin(t * 9 + cd.x) * 0.12 + Math.sin(t * 23 + cd.y) * 0.06;
     glow(ctx, cd.x, cd.y - 12, 70 * fl, 'rgba(255,180,80,0.10)');
     ctx.fillStyle = '#d9cba8';
@@ -208,6 +179,138 @@ function drawArenaLife(game, ctx, t) {
       ctx.fillStyle = '#d9cba8';
     }
   }
+  // enemy camp: cursed totem + banner ring
+  if (ch.camp && !ch.camp.cleared) {
+    const cp = ch.camp;
+    ctx.save();
+    ctx.strokeStyle = hexA('#c23b4a', cp.engaged ? 0.5 : 0.22); ctx.lineWidth = 2;
+    ctx.setLineDash([14, 10]); ctx.lineDashOffset = -t * 16;
+    ctx.beginPath(); ctx.arc(cp.x, cp.y, cp.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    // totem
+    glow(ctx, cp.x, cp.y - 20, 50, 'rgba(194,59,74,0.18)');
+    ctx.fillStyle = '#231a26';
+    ctx.fillRect(cp.x - 7, cp.y - 46, 14, 52);
+    ctx.strokeStyle = 'rgba(194,59,74,0.7)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(cp.x - 7, cp.y - 46, 14, 52);
+    ctx.fillStyle = `rgba(255,90,90,${0.6 + Math.sin(t * 4) * 0.3})`;
+    ctx.font = '16px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('♅', cp.x, cp.y - 30);
+    ctx.restore();
+  }
+  // the portal a fallen boss leaves behind: the way to the next world
+  if (ch.landmark && ch.landmark.portal) {
+    const lm = ch.landmark;
+    ctx.save();
+    glow(ctx, lm.x, lm.y, 120, 'rgba(143,216,255,0.14)');
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = hexA('#8fd8ff', 0.5 - i * 0.12);
+      ctx.lineWidth = 3 - i * 0.7;
+      ctx.beginPath();
+      ctx.ellipse(lm.x, lm.y, 34 + i * 10 + Math.sin(t * 2 + i) * 4, 48 + i * 12 + Math.cos(t * 2.4 + i) * 4, t * (0.4 + i * 0.15), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.fillStyle = hexA('#dff4ff', 0.5 + Math.sin(t * 3) * 0.2);
+    ctx.font = '26px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✦', lm.x, lm.y);
+    ctx.restore();
+  }
+  // boss gate landmark
+  if (ch.landmark && !ch.landmark.cleared) {
+    const lm = ch.landmark;
+    ctx.save();
+    glow(ctx, lm.x, lm.y, 130, 'rgba(255,217,122,0.10)');
+    ctx.strokeStyle = hexA('#ffd97a', 0.4 + Math.sin(t * 2) * 0.15); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(lm.x, lm.y, lm.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = hexA('#ffd97a', 0.15);
+    ctx.beginPath(); ctx.arc(lm.x, lm.y, lm.r * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = hexA('#ffd97a', 0.5);
+    ctx.font = '30px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + t * 0.3;
+      ctx.fillText(RUNE_GLYPHS[i * 2 % RUNE_GLYPHS.length], lm.x + Math.cos(a) * lm.r * 0.85, lm.y + Math.sin(a) * lm.r * 0.85);
+    }
+    ctx.font = '44px Georgia, serif';
+    ctx.fillStyle = hexA('#ffd97a', 0.6 + Math.sin(t * 3) * 0.2);
+    ctx.fillText('☩', lm.x, lm.y);
+    ctx.restore();
+  }
+  // sanctuary: a warded hearth in the dark
+  if (ch.sanctuary) {
+    const s = ch.sanctuary;
+    ctx.save();
+    // ward ring
+    ctx.strokeStyle = hexA('#8fd8ff', 0.28 + Math.sin(t * 1.5) * 0.08); ctx.lineWidth = 2;
+    ctx.setLineDash([4, 14]); ctx.lineDashOffset = -t * 8;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = hexA('#8fd8ff', 0.03);
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    // hearth fire
+    const fl = 0.8 + Math.sin(t * 8 + s.x) * 0.14 + Math.sin(t * 21) * 0.06;
+    glow(ctx, s.x, s.y - 8, 90 * fl, 'rgba(255,180,80,0.16)');
+    ctx.fillStyle = '#2c2016';
+    for (let i = 0; i < 4; i++) { // log circle
+      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate((i / 4) * Math.PI + 0.4);
+      ctx.fillRect(-16, -3, 32, 6);
+      ctx.restore();
+    }
+    ctx.fillStyle = `rgba(255,${150 + fl * 60 | 0},60,${0.85 * fl})`;
+    ctx.beginPath();
+    ctx.moveTo(s.x - 8, s.y);
+    ctx.quadraticCurveTo(s.x - 6, s.y - 18 * fl, s.x, s.y - 26 * fl);
+    ctx.quadraticCurveTo(s.x + 6, s.y - 18 * fl, s.x + 8, s.y);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = `rgba(255,240,180,${0.9 * fl})`;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y - 6, 3.5, 8 * fl, 0, 0, Math.PI * 2); ctx.fill();
+    // card table beside the fire
+    ctx.fillStyle = '#241d16'; ctx.fillRect(s.x + 28, s.y - 12, 34, 22);
+    ctx.strokeStyle = 'rgba(217,180,91,0.5)'; ctx.lineWidth = 1.2; ctx.strokeRect(s.x + 28, s.y - 12, 34, 22);
+    for (let i = 0; i < 3; i++) {
+      ctx.save(); ctx.translate(s.x + 36 + i * 9, s.y - 2); ctx.rotate(-0.2 + i * 0.2);
+      ctx.fillStyle = 'rgba(232,220,192,0.75)'; ctx.fillRect(-3.5, -5.5, 7, 11);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  // treasure cache
+  if (ch.treasure && !ch.treasure.opened) {
+    const tr = ch.treasure;
+    const bob = Math.sin(t * 2.5 + tr.x) * 2;
+    ctx.save();
+    glow(ctx, tr.x, tr.y, 34, 'rgba(255,217,122,0.16)');
+    ctx.translate(tr.x, tr.y + bob);
+    ctx.fillStyle = '#2c2016';
+    ctx.fillRect(-14, -10, 28, 20);
+    ctx.strokeStyle = '#d9b45b'; ctx.lineWidth = 2;
+    ctx.strokeRect(-14, -10, 28, 20);
+    ctx.beginPath(); ctx.moveTo(-14, -2); ctx.lineTo(14, -2); ctx.stroke();
+    ctx.fillStyle = '#ffd97a';
+    ctx.beginPath(); ctx.arc(0, -2, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ── bounded regions: duel zones & boss gates ──
+function drawRegionBoundary(game, ctx, t) {
+  const z = game.zoneRegion;
+  if (!z) return;
+  const color = z.kind === 'duel' ? '#c23b4a' : '#ffd97a';
+  ctx.save();
+  ctx.strokeStyle = hexA(color, 0.55); ctx.lineWidth = 4;
+  ctx.setLineDash([18, 12]); ctx.lineDashOffset = -t * 24;
+  ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = hexA(color, 0.18); ctx.lineWidth = 14;
+  ctx.beginPath(); ctx.arc(z.x, z.y, z.r + 9, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = hexA(color, 0.55);
+  ctx.font = '20px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const n = 14;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + t * 0.15;
+    ctx.fillText(RUNE_GLYPHS[i % RUNE_GLYPHS.length], z.x + Math.cos(a) * (z.r + 24), z.y + Math.sin(a) * (z.r + 24));
+  }
+  ctx.restore();
 }
 
 function glow(ctx, x, y, r, color) {
@@ -226,7 +329,6 @@ function drawChannelPreview(game, ctx, t) {
   const color = pv.color || '#b48cff';
 
   if (pv.reticle) {
-    // small tracking reticle on the projectile's target
     if (pv.enemy && !pv.enemy.dead) { pv.x = pv.enemy.x; pv.y = pv.enemy.y; }
     ctx.save();
     ctx.translate(pv.x, pv.y); ctx.rotate(t * 2);
@@ -242,16 +344,13 @@ function drawChannelPreview(game, ctx, t) {
 
   const { x, y, r } = pv;
   ctx.save();
-  // soft fill + pulse
   const pulse = 0.06 + 0.04 * Math.sin(t * 5);
   ctx.fillStyle = hexA(color, pulse + prog * 0.10);
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-  // outer dashed ring, slowly rotating
   ctx.strokeStyle = hexA(color, 0.55); ctx.lineWidth = 2;
   ctx.setLineDash([10, 8]); ctx.lineDashOffset = -t * 30;
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
   ctx.setLineDash([]);
-  // inner rune ring
   ctx.strokeStyle = hexA(color, 0.3);
   ctx.beginPath(); ctx.arc(x, y, r * 0.7, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = hexA(color, 0.75);
@@ -267,11 +366,9 @@ function drawChannelPreview(game, ctx, t) {
   ctx.lineCap = 'round';
   ctx.beginPath(); ctx.arc(x, y, r * 0.55, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2);
   ctx.stroke(); ctx.lineCap = 'butt';
-  // card glyph at the heart of the circle
   ctx.fillStyle = hexA(color, 0.5 + prog * 0.5);
   ctx.font = `${Math.max(20, r * 0.3)}px Georgia, serif`;
   ctx.fillText(ch.inst.def.glyph, x, y);
-  // nearly-done flare
   if (prog > 0.85) glow(ctx, x, y, r * 0.9, hexA(color, (prog - 0.85) * 1.2));
   ctx.restore();
 }
@@ -292,12 +389,29 @@ function drawZone(ctx, z, t) {
   ctx.setLineDash([6, 6]); ctx.lineDashOffset = t * 20;
   ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, Math.PI * 2); ctx.stroke();
   ctx.setLineDash([]);
-  // drifting element motes
   for (let i = 0; i < 7; i++) {
     const a = t * (0.5 + i * 0.13) + i * 2.3;
     const rr = z.r * (0.25 + ((i * 37) % 60) / 100);
     ctx.fillStyle = hexA(c, 0.5);
     ctx.beginPath(); ctx.arc(z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTrap(ctx, tr, t) {
+  const arming = tr.armT > 0;
+  const a = arming ? 0.65 : 0.28 + Math.sin(t * 3) * 0.06;
+  ctx.save();
+  ctx.strokeStyle = hexA(tr.color, a); ctx.lineWidth = arming ? 2.5 : 1.5;
+  ctx.setLineDash([5, 7]); ctx.lineDashOffset = t * 10;
+  ctx.beginPath(); ctx.arc(tr.x, tr.y, tr.r * 0.55, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.translate(tr.x, tr.y);
+  ctx.rotate(arming ? t * 6 : Math.PI / 4);
+  ctx.fillStyle = hexA(tr.color, arming ? 0.9 : 0.5);
+  for (let i = 0; i < 4; i++) {
+    ctx.rotate(Math.PI / 2);
+    ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -4); ctx.lineTo(-3, -4); ctx.closePath(); ctx.fill();
   }
   ctx.restore();
 }
@@ -311,10 +425,9 @@ function drawTelegraph(ctx, tg, t) {
     ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.stroke();
-    // shrinking inner ring = time remaining
     ctx.strokeStyle = hexA(c, 0.5); ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r * prog, 0, Math.PI * 2); ctx.stroke();
-    if (prog > 0.75) {
+    if (prog > 0.75 && !tg.friendly) {
       ctx.fillStyle = hexA(c, (prog - 0.75) * 0.8 * (0.6 + 0.4 * Math.sin(t * 25)));
       ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.fill();
     }
@@ -324,7 +437,6 @@ function drawTelegraph(ctx, tg, t) {
     ctx.fillRect(x - w / 2, y - h / 2, w, h);
     ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2.5;
     ctx.strokeRect(x - w / 2, y - h / 2, w, h);
-    // closing "pages" from both sides
     const cl = (w / 2) * prog;
     ctx.fillStyle = hexA(c, 0.22);
     ctx.fillRect(x - w / 2, y - h / 2, cl, h);
@@ -335,6 +447,16 @@ function drawTelegraph(ctx, tg, t) {
 
 function drawPickup(ctx, pk, t) {
   const bob = Math.sin(t * 4 + pk.x) * 3;
+  if (pk.kind === 'gold') {
+    ctx.save();
+    ctx.translate(pk.x, pk.y + bob);
+    glow(ctx, 0, 0, 14, 'rgba(255,217,122,0.3)');
+    ctx.fillStyle = '#ffd97a';
+    ctx.beginPath(); ctx.ellipse(0, 0, 5, 5 * (0.4 + Math.abs(Math.sin(t * 3 + pk.x)) * 0.6), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8a6a25'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
+    return;
+  }
   if (pk.kind === 'shard') {
     ctx.save();
     ctx.translate(pk.x, pk.y + bob); ctx.rotate(t * 2);
@@ -363,13 +485,24 @@ function drawEnemy(ctx, e, t) {
   const frozen = (e.freeze || 0) > 0;
   ctx.translate(e.x, e.y);
 
+  if (e.state === 'vanish') { // stalkers phase out into ash
+    ctx.fillStyle = hexA(e.def.glow, 0.18 + Math.sin(t * 9) * 0.06);
+    ctx.beginPath(); ctx.arc(0, 0, e.r * 0.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
   const id = e.def.id;
-  if (id === 'wisp') drawWisp(ctx, e, t);
+  if (id === 'wisp' || id === 'imp') drawWisp(ctx, e, t);
   else if (id === 'sentinel') drawSentinel(ctx, e, t);
   else if (id === 'horror') drawHorror(ctx, e, t);
-  else if (id === 'knight' || id === 'custodian') drawKnight(ctx, e, t);
+  else if (id === 'knight' || id === 'custodian' || id === 'guardian' ||
+           id === 'cinder_knight' || id === 'pyre_custodian') drawKnight(ctx, e, t);
   else if (id === 'book') drawBook(ctx, e, t);
-  else if (id === 'librarian') drawLibrarian(ctx, e, t);
+  else if (id === 'librarian' || id === 'sovereign') drawLibrarian(ctx, e, t);
+  else if (id === 'stalker') drawStalker(ctx, e, t);
+  else if (id === 'mortar') drawMortar(ctx, e, t);
+  else if (id === 'rival') drawRivalDuelist(ctx, e, t);
 
   if (flash) {
     ctx.globalCompositeOperation = 'lighter';
@@ -399,30 +532,31 @@ function drawEnemy(ctx, e, t) {
     ctx.beginPath(); ctx.arc(px, -e.r - 12, 3, 0, Math.PI * 2); ctx.fill();
     px += 8;
   }
-  // hp bar (only if damaged, bosses use the big DOM bar)
-  if (!e.def.boss && e.hp < e.maxHp) {
+  // hp bar (bosses & rivals use the big DOM bar)
+  if (!e.def.boss && !e.def.rival && e.hp < e.maxHp) {
     const w = e.r * 2.2;
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(-w / 2, -e.r - 8, w, 3.5);
     ctx.fillStyle = e.def.elite ? '#ffd97a' : '#c23b4a';
     ctx.fillRect(-w / 2, -e.r - 8, w * Math.max(0, e.hp / e.maxHp), 3.5);
   }
   ctx.restore();
+
+  // the rival's featured cards hover above it — its build identity
+  if (e.def.rival && e.featured) drawFeaturedRow(ctx, e.x, e.y - e.r - 44, e.featured, t, e.casting);
 }
 
 function drawWisp(ctx, e, t) {
   const w = Math.sin(e.wobble) * 2;
-  glow(ctx, 0, 0, e.r * 2, 'rgba(143,111,255,0.13)');
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, 0.13));
   ctx.fillStyle = e.def.color;
   ctx.beginPath();
   ctx.moveTo(0, -e.r - w);
   ctx.bezierCurveTo(e.r, -e.r, e.r + w, e.r * 0.5, 0, e.r + 3 + Math.sin(e.wobble * 2) * 3);
   ctx.bezierCurveTo(-e.r - w, e.r * 0.5, -e.r, -e.r, 0, -e.r - w);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(143,111,255,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
-  // ink drips
+  ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1.5; ctx.stroke();
   ctx.fillStyle = 'rgba(35,28,60,0.8)';
   ctx.beginPath(); ctx.ellipse(3, e.r + 6, 2, 4 + Math.sin(e.wobble * 3) * 2, 0, 0, Math.PI * 2); ctx.fill();
-  // eyes
   ctx.fillStyle = '#c9b6ff';
   ctx.beginPath(); ctx.arc(-4, -2, 2, 0, Math.PI * 2); ctx.arc(4, -2, 2, 0, Math.PI * 2); ctx.fill();
 }
@@ -450,14 +584,12 @@ function drawHorror(ctx, e, t) {
   ctx.save(); ctx.scale(pulse, pulse);
   ctx.rotate(Math.sin(e.wobble * 0.7) * 0.15);
   glow(ctx, 0, 0, e.r * 2, fusing ? 'rgba(255,138,74,0.3)' : 'rgba(255,138,74,0.1)');
-  // open book with fangs of pages
   ctx.fillStyle = e.def.color;
   ctx.beginPath();
   ctx.moveTo(-e.r, -e.r * 0.5); ctx.lineTo(0, -e.r * 0.2); ctx.lineTo(e.r, -e.r * 0.5);
   ctx.lineTo(e.r, e.r * 0.6); ctx.lineTo(0, e.r * 0.9); ctx.lineTo(-e.r, e.r * 0.6);
   ctx.closePath(); ctx.fill();
   ctx.strokeStyle = 'rgba(255,138,74,0.6)'; ctx.lineWidth = 1.5; ctx.stroke();
-  // page teeth
   ctx.fillStyle = '#d9cba8';
   for (let i = -2; i <= 2; i++) {
     ctx.beginPath();
@@ -466,7 +598,6 @@ function drawHorror(ctx, e, t) {
     ctx.lineTo(i * e.r * 0.35 + 3, -e.r * 0.32);
     ctx.fill();
   }
-  // burning eye
   ctx.fillStyle = fusing ? '#fff1c9' : '#ff8a4a';
   ctx.beginPath(); ctx.arc(0, e.r * 0.35, fusing ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
@@ -475,9 +606,8 @@ function drawHorror(ctx, e, t) {
 function drawKnight(ctx, e, t) {
   const elite = e.def.elite;
   const tel = e.state === 'telegraph';
-  if (elite) glow(ctx, 0, 0, e.r * 2.4, 'rgba(255,217,122,0.14)');
+  if (elite) glow(ctx, 0, 0, e.r * 2.4, hexA(e.def.glow, 0.14));
   if (tel) {
-    // lunge warning line
     ctx.strokeStyle = 'rgba(194,59,74,0.6)'; ctx.lineWidth = 4; ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(0, 0);
     ctx.lineTo(e.lungeDir.x * e.def.lungeSpeed * 0.38, e.lungeDir.y * e.def.lungeSpeed * 0.38);
@@ -485,7 +615,6 @@ function drawKnight(ctx, e, t) {
   }
   const sh = tel ? Math.sin(t * 40) * 1.5 : 0;
   ctx.save(); ctx.translate(sh, 0);
-  // shield-shaped body
   ctx.fillStyle = e.def.color;
   ctx.beginPath();
   ctx.moveTo(0, -e.r);
@@ -494,13 +623,11 @@ function drawKnight(ctx, e, t) {
   ctx.lineTo(-e.r * 0.75, e.r * 0.5);
   ctx.bezierCurveTo(-e.r, -e.r * 0.1, -e.r, -e.r, 0, -e.r);
   ctx.fill();
-  ctx.strokeStyle = elite ? 'rgba(255,217,122,0.85)' : 'rgba(194,59,74,0.55)';
+  ctx.strokeStyle = elite ? hexA(e.def.glow, 0.85) : 'rgba(194,59,74,0.55)';
   ctx.lineWidth = elite ? 2.5 : 1.5; ctx.stroke();
-  // helm slit
-  ctx.fillStyle = elite ? '#ffd97a' : '#ff5d6a';
+  ctx.fillStyle = elite ? e.def.glow : '#ff5d6a';
   ctx.fillRect(-e.r * 0.45, -e.r * 0.45, e.r * 0.9, 3);
-  // emblem
-  ctx.fillStyle = elite ? 'rgba(255,217,122,0.7)' : 'rgba(194,59,74,0.5)';
+  ctx.fillStyle = elite ? hexA(e.def.glow, 0.7) : 'rgba(194,59,74,0.5)';
   ctx.font = `${e.r * 0.8}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(elite ? '♛' : '✠', 0, e.r * 0.25);
   ctx.restore();
@@ -510,9 +637,8 @@ function drawBook(ctx, e, t) {
   const flap = Math.sin(e.wobble * 3) * 0.5 + 0.6;
   glow(ctx, 0, 0, e.r * 1.8, 'rgba(255,138,74,0.12)');
   ctx.save();
-  ctx.rotate(Math.atan2(e.y, e.x) * 0 + Math.sin(e.wobble) * 0.2);
+  ctx.rotate(Math.sin(e.wobble) * 0.2);
   ctx.fillStyle = e.def.color;
-  // two wings of pages
   ctx.beginPath(); ctx.moveTo(0, 0);
   ctx.quadraticCurveTo(-e.r * 1.4, -e.r * flap, -e.r * 1.7, e.r * 0.2);
   ctx.quadraticCurveTo(-e.r * 0.7, e.r * 0.3, 0, e.r * 0.4); ctx.fill();
@@ -536,7 +662,6 @@ function drawLibrarian(ctx, e, t) {
   glow(ctx, 0, 0, e.r * 3.2, ph2 ? 'rgba(255,217,122,0.2)' : 'rgba(143,111,255,0.16)');
   const hover = Math.sin(t * 1.6) * 5;
   ctx.save(); ctx.translate(0, hover);
-  // torn robes: tall tapering silhouette
   ctx.fillStyle = e.def.color;
   ctx.beginPath();
   ctx.moveTo(0, -e.r * 1.5);
@@ -545,7 +670,6 @@ function drawLibrarian(ctx, e, t) {
   ctx.bezierCurveTo(-e.r * 1.05, -e.r * 0.1, -e.r * 0.9, -e.r * 1.2, 0, -e.r * 1.5);
   ctx.fill();
   ctx.strokeStyle = 'rgba(217,180,91,0.4)'; ctx.lineWidth = 2; ctx.stroke();
-  // golden mask
   ctx.fillStyle = '#d9b45b';
   ctx.beginPath(); ctx.ellipse(0, -e.r * 0.95, e.r * 0.42, e.r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = '#8a6a25'; ctx.lineWidth = 1.5; ctx.stroke();
@@ -553,7 +677,6 @@ function drawLibrarian(ctx, e, t) {
   ctx.beginPath(); ctx.ellipse(-e.r * 0.16, -e.r * 1.0, 3.5, 6, 0.2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(e.r * 0.16, -e.r * 1.0, 3.5, 6, -0.2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  // orbiting cursed books & spinning cards
   for (let i = 0; i < 4; i++) {
     const a = t * 1.1 + (i / 4) * Math.PI * 2;
     const bx = Math.cos(a) * e.r * 1.9, by = Math.sin(a) * e.r * 1.4 + hover;
@@ -572,34 +695,145 @@ function drawLibrarian(ctx, e, t) {
   }
 }
 
-function drawSummon(ctx, s, t) {
-  const fade = Math.min(1, s.t * 3, (s.dur - s.t) * 2);
+// World II: the ash stalker — a hunched shade with burning eyes
+function drawStalker(ctx, e, t) {
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, 0.12));
   ctx.save();
-  ctx.globalAlpha = 0.75 * fade;
-  ctx.translate(s.x, s.y + Math.sin(t * 3) * 4);
-  glow(ctx, 0, 0, 30, 'rgba(169,143,224,0.25)');
-  ctx.fillStyle = '#241d3d';
+  ctx.rotate(Math.sin(e.wobble * 0.8) * 0.12);
+  ctx.fillStyle = e.def.color;
   ctx.beginPath();
-  ctx.moveTo(0, -16);
-  ctx.bezierCurveTo(12, -12, 11, 8, 8, 16);
-  ctx.lineTo(-8, 16);
-  ctx.bezierCurveTo(-11, 8, -12, -12, 0, -16);
+  ctx.moveTo(0, -e.r * 1.2);
+  ctx.bezierCurveTo(e.r * 1.1, -e.r * 0.6, e.r * 0.9, e.r * 0.6, e.r * 0.4, e.r);
+  for (let i = 2; i >= -2; i--) ctx.lineTo(i * e.r * 0.22, e.r * (i % 2 ? 1.1 : 0.8));
+  ctx.bezierCurveTo(-e.r * 0.9, e.r * 0.6, -e.r * 1.1, -e.r * 0.6, 0, -e.r * 1.2);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(169,143,224,0.7)'; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.fillStyle = '#c9b6ff';
-  ctx.beginPath(); ctx.arc(-3, -6, 1.8, 0, Math.PI * 2); ctx.arc(3, -6, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.45); ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.fillStyle = '#ff8a4a';
+  ctx.beginPath(); ctx.arc(-4, -e.r * 0.5, 2.2, 0, Math.PI * 2); ctx.arc(4, -e.r * 0.5, 2.2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
-// ── the player: a hooded card-binder ──
+// World II: the magma maw — a squat obelisk with a molten mouth
+function drawMortar(ctx, e, t) {
+  const charging = e.fireT < 0.6;
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, charging ? 0.25 : 0.12));
+  ctx.fillStyle = '#0d0806';
+  ctx.beginPath(); ctx.ellipse(0, e.r * 0.5, e.r * 1.15, e.r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(-e.r, e.r * 0.5); ctx.lineTo(-e.r * 0.55, -e.r); ctx.lineTo(e.r * 0.55, -e.r); ctx.lineTo(e.r, e.r * 0.5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.6); ctx.lineWidth = 1.5; ctx.stroke();
+  const mouth = charging ? 1 + Math.sin(t * 20) * 0.15 : 1;
+  ctx.fillStyle = hexA(e.def.glow, charging ? 0.95 : 0.65);
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.3, e.r * 0.4 * mouth, e.r * 0.3 * mouth, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff1c9';
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.3, e.r * 0.15 * mouth, e.r * 0.12 * mouth, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+// a hooded binder silhouette — used for the dueling rival (world-entity version)
+function drawRivalDuelist(ctx, e, t) {
+  const glowC = e.def.glow;
+  glow(ctx, 0, 0, 46, hexA(glowC, 0.16));
+  drawBinderShape(ctx, t, glowC, e.casting ? 0.9 : 0.75);
+  if (e.casting) {
+    // visible casting: the card floats above, growing brighter
+    const k = e.casting.t / e.casting.dur;
+    glow(ctx, 0, -34, 26 + k * 16, hexA(glowC, 0.2 + k * 0.3));
+  }
+}
+
+// companions drawn from a plain object (ally, or the neutral rival during the choice)
+function drawCompanion(ctx, c, t, isAlly) {
+  ctx.save();
+  ctx.translate(c.x, c.y);
+  const glowC = c.color || '#d9b45b';
+  glow(ctx, 0, 0, 46, hexA(glowC, isAlly ? 0.14 : 0.2));
+  drawBinderShape(ctx, t + (c.wob || 0), glowC, isAlly ? 0.8 : 1);
+  ctx.restore();
+  // name + featured cards
+  ctx.save();
+  ctx.font = 'bold 13px Georgia, serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3;
+  ctx.strokeText(c.name, c.x, c.y - 36);
+  ctx.fillStyle = glowC;
+  ctx.fillText(c.name, c.x, c.y - 36);
+  ctx.restore();
+  if (c.featured) drawFeaturedRow(ctx, c.x, c.y - 66, c.featured, t, c.casting);
+}
+
+function drawBinderShape(ctx, t, accent, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const bob = Math.sin(t * 5) * 1.2;
+  ctx.translate(0, bob);
+  const r = 14;
+  ctx.fillStyle = '#181c34';
+  ctx.beginPath();
+  ctx.moveTo(0, -r - 4);
+  ctx.bezierCurveTo(r + 4, -r, r + 2, r * 0.6, r * 0.7, r + 2);
+  ctx.lineTo(-r * 0.7, r + 2);
+  ctx.bezierCurveTo(-r - 2, r * 0.6, -r - 4, -r, 0, -r - 4);
+  ctx.fill();
+  ctx.strokeStyle = hexA(accent, 0.8); ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.fillStyle = '#101427';
+  ctx.beginPath(); ctx.arc(0, -r * 0.45, r * 0.62, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8dcc0';
+  ctx.beginPath(); ctx.ellipse(0, -r * 0.45, r * 0.34, r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = hexA(accent, 0.7 + Math.sin(t * 3) * 0.25);
+  ctx.font = `${r * 0.75}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('✦', 0, r * 0.3);
+  ctx.restore();
+}
+
+// four floating card previews — the build identity of a rival soul
+function drawFeaturedRow(ctx, x, y, featured, t, casting) {
+  const n = featured.length;
+  const w = 22, h = 32, gap = 8;
+  const total = n * w + (n - 1) * gap;
+  ctx.save();
+  for (let i = 0; i < n; i++) {
+    const def = featured[i];
+    const cx = x - total / 2 + i * (w + gap) + w / 2;
+    const cy = y + Math.sin(t * 2 + i * 1.3) * 3;
+    const isCasting = casting && casting.def && casting.def.id === def.id;
+    const color = ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school];
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.sin(t * 1.5 + i) * 0.08);
+    if (isCasting) { ctx.scale(1.35, 1.35); glow(ctx, 0, 0, 30, hexA(color, 0.35)); }
+    ctx.fillStyle = 'rgba(16,18,34,0.95)';
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.strokeStyle = hexA(color, isCasting ? 1 : 0.75); ctx.lineWidth = isCasting ? 2 : 1.2;
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.fillStyle = hexA(color, 0.9);
+    ctx.font = '13px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(def.glyph, 0, -2);
+    ctx.fillStyle = 'rgba(232,220,192,0.6)';
+    ctx.fillRect(-w / 2 + 3, h / 2 - 8, w - 6, 1.5);
+    ctx.fillRect(-w / 2 + 3, h / 2 - 5, w - 9, 1.5);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// ── the player: a hooded card-binder, with power auras & sustained rings ──
 function drawPlayer(game, ctx, t) {
   const p = game.player;
-  // dash trail
   for (const tr of p.trail) {
     const a = 1 - tr.t / 0.3;
-    ctx.fillStyle = `rgba(217,180,91,${a * 0.25})`;
+    ctx.fillStyle = tr.color ? hexA(tr.color, a * 0.3) : `rgba(217,180,91,${a * 0.25})`;
     ctx.beginPath(); ctx.arc(tr.x, tr.y, p.r * a, 0, Math.PI * 2); ctx.fill();
   }
+
+  const powers = game.engine.powers;
+  // power aura: the active Powers make the hero visibly transformed
+  if (powers.length > 0) {
+    const pw = powers[powers.length - 1];
+    glow(ctx, p.x, p.y, 60 + Math.sin(t * 4) * 6, hexA(pw.color, 0.16));
+  }
+
   ctx.save();
   ctx.translate(p.x, p.y);
   if (p.untargetable > 0) ctx.globalAlpha = 0.45;
@@ -607,7 +841,6 @@ function drawPlayer(game, ctx, t) {
   glow(ctx, 0, 0, 46, 'rgba(217,180,91,0.12)');
   const bob = Math.sin(t * 5) * 1.2;
   ctx.translate(0, bob);
-  // cloak
   ctx.fillStyle = '#181c34';
   ctx.beginPath();
   ctx.moveTo(0, -p.r - 4);
@@ -616,29 +849,65 @@ function drawPlayer(game, ctx, t) {
   ctx.bezierCurveTo(-p.r - 2, p.r * 0.6, -p.r - 4, -p.r, 0, -p.r - 4);
   ctx.fill();
   ctx.strokeStyle = 'rgba(217,180,91,0.75)'; ctx.lineWidth = 1.8; ctx.stroke();
-  // hood + ivory mask
   ctx.fillStyle = '#101427';
   ctx.beginPath(); ctx.arc(0, -p.r * 0.45, p.r * 0.62, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#e8dcc0';
   ctx.beginPath(); ctx.ellipse(Math.cos(p.facing) * 2.5, -p.r * 0.45 + Math.sin(p.facing) * 1.5, p.r * 0.34, p.r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
-  // glowing sigil on the chest
-  ctx.fillStyle = `rgba(255,217,122,${0.7 + Math.sin(t * 3) * 0.25})`;
+  const clsColor = (CLASSES[game.playerClass] || CLASSES.mage).color;
+  ctx.fillStyle = hexA(clsColor, 0.7 + Math.sin(t * 3) * 0.25);
   ctx.font = `${p.r * 0.75}px Georgia, serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('✦', 0, p.r * 0.3);
+  ctx.fillText((CLASSES[game.playerClass] || CLASSES.mage).glyph, 0, p.r * 0.3);
   ctx.restore();
-  // three tarot cards orbit the binder — the deck made visible
-  for (let i = 0; i < 3; i++) {
-    const a = t * 1.4 + (i / 3) * Math.PI * 2;
-    const cx = p.x + Math.cos(a) * 30, cy = p.y + Math.sin(a) * 22 - 6;
+
+  // orbiting power glyphs: each active Power circles the binder
+  powers.forEach((pw, i) => {
+    const a = t * 1.4 + (i / Math.max(1, powers.length)) * Math.PI * 2;
+    const cx = p.x + Math.cos(a) * 32, cy = p.y + Math.sin(a) * 24 - 6;
     ctx.save();
     ctx.translate(cx, cy); ctx.rotate(Math.sin(a) * 0.5);
     ctx.fillStyle = 'rgba(20,22,42,0.95)';
-    ctx.fillRect(-4.5, -7, 9, 14);
-    ctx.strokeStyle = 'rgba(217,180,91,0.9)'; ctx.lineWidth = 1;
-    ctx.strokeRect(-4.5, -7, 9, 14);
-    ctx.fillStyle = 'rgba(255,217,122,0.8)';
-    ctx.font = '7px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('✦', 0, 0.5);
+    ctx.fillRect(-5, -8, 10, 16);
+    ctx.strokeStyle = hexA(pw.color, 0.95); ctx.lineWidth = 1.2;
+    ctx.strokeRect(-5, -8, 10, 16);
+    ctx.fillStyle = hexA(pw.color, 0.95);
+    ctx.font = '8px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(pw.glyph, 0, 0.5);
+    ctx.restore();
+  });
+  if (powers.length === 0) {
+    // idle: three faint tarot cards orbit the binder
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.4 + (i / 3) * Math.PI * 2;
+      const cx = p.x + Math.cos(a) * 30, cy = p.y + Math.sin(a) * 22 - 6;
+      ctx.save();
+      ctx.translate(cx, cy); ctx.rotate(Math.sin(a) * 0.5);
+      ctx.fillStyle = 'rgba(20,22,42,0.95)';
+      ctx.fillRect(-4.5, -7, 9, 14);
+      ctx.strokeStyle = 'rgba(217,180,91,0.9)'; ctx.lineWidth = 1;
+      ctx.strokeRect(-4.5, -7, 9, 14);
+      ctx.fillStyle = 'rgba(255,217,122,0.8)';
+      ctx.font = '7px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('✦', 0, 0.5);
+      ctx.restore();
+    }
+  }
+
+  // sustained cast: a rotating rune ring with a progress arc around the hero
+  for (const s of game.sustains) {
+    const prog = s.t / s.dur;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.strokeStyle = hexA(s.color, 0.5); ctx.lineWidth = 2;
+    ctx.setLineDash([8, 8]); ctx.lineDashOffset = -t * 40;
+    ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = hexA(s.color, 0.95); ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, 0, 42, -Math.PI / 2, -Math.PI / 2 + (1 - prog) * Math.PI * 2); ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = hexA(s.color, 0.9);
+    ctx.font = '16px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const a = -Math.PI / 2 + (1 - prog) * Math.PI * 2;
+    ctx.fillText(s.def.glyph, Math.cos(a) * 42, Math.sin(a) * 42);
     ctx.restore();
   }
 }
@@ -653,7 +922,7 @@ function drawProj(ctx, pr, t) {
     ctx.fillStyle = '#c9c2b2';
     ctx.beginPath(); ctx.moveTo(-pr.r, -3); ctx.lineTo(pr.r, -pr.r); ctx.lineTo(pr.r, pr.r); ctx.lineTo(-pr.r, 3); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#8a6a25'; ctx.lineWidth = 1.5; ctx.stroke();
-  } else if (pr.r >= 18) { // arcane orb
+  } else if (pr.r >= 18) {
     ctx.fillStyle = hexA(pr.color, 0.35);
     ctx.beginPath(); ctx.arc(0, 0, pr.r, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = hexA(pr.color, 0.9); ctx.lineWidth = 2;
@@ -661,7 +930,6 @@ function drawProj(ctx, pr, t) {
     ctx.fillStyle = '#fff';
     ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
   } else {
-    // comet: bright head, fading tail
     const grad = ctx.createLinearGradient(-pr.r * 4.5, 0, pr.r, 0);
     grad.addColorStop(0, hexA(pr.color, 0));
     grad.addColorStop(1, hexA(pr.color, 0.8));
@@ -759,4 +1027,45 @@ function drawFloater(ctx, f) {
   ctx.fillStyle = f.color;
   ctx.fillText(f.txt, f.x, f.y);
   ctx.restore();
+}
+
+// ── edge compass: the world always offers somewhere to go ──
+function drawCompass(game, ctx, W, H, scale) {
+  if (game.state !== 'combat' || game.zoneRegion) return;
+  const p = game.player;
+  const targets = [];
+  const cx = Math.floor(p.x / CHUNK), cy = Math.floor(p.y / CHUNK);
+  for (let dy = -4; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      const key = (cx + dx) + ',' + (cy + dy);
+      const ch = game.chunks.get(key);
+      if (!ch) continue;
+      if (ch.camp && !ch.camp.cleared && !ch.camp.engaged) targets.push({ x: ch.camp.x, y: ch.camp.y, color: '#c23b4a', glyph: '♅' });
+      if (ch.landmark && !ch.landmark.cleared) targets.push({ x: ch.landmark.x, y: ch.landmark.y, color: '#ffd97a', glyph: '☩' });
+      if (ch.landmark && ch.landmark.portal) targets.push({ x: ch.landmark.x, y: ch.landmark.y, color: '#dff4ff', glyph: '✦' });
+      if (ch.sanctuary) targets.push({ x: ch.sanctuary.x, y: ch.sanctuary.y, color: '#8fd8ff', glyph: '⌂' });
+    }
+  }
+  // nearest of each color
+  const best = {};
+  for (const tg of targets) {
+    const d = Math.hypot(tg.x - p.x, tg.y - p.y);
+    if (d < 500 || d > 3200) continue; // visible or too far
+    if (!best[tg.color] || d < best[tg.color].d) best[tg.color] = { ...tg, d };
+  }
+  for (const tg of Object.values(best)) {
+    const a = Math.atan2(tg.y - p.y, tg.x - p.x);
+    const rx = W / 2 - 44, ry = H / 2 - 96;
+    const px2 = W / 2 + Math.cos(a) * rx, py2 = H / 2 + Math.sin(a) * ry;
+    ctx.save();
+    ctx.globalAlpha = 0.5 + Math.sin(game.time * 3) * 0.15;
+    ctx.translate(px2, py2);
+    ctx.rotate(a);
+    ctx.fillStyle = tg.color;
+    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-4, -7); ctx.lineTo(-4, 7); ctx.closePath(); ctx.fill();
+    ctx.rotate(-a);
+    ctx.font = '13px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(tg.glyph, -16 * Math.cos(a), -16 * Math.sin(a));
+    ctx.restore();
+  }
 }
