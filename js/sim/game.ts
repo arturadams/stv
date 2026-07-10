@@ -37,7 +37,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     // class resources
     rage: 0, rageDecayT: 0, opportunity: 0,
     dashOverride: null, // a card owning the Dash
-    enemies: [], projectiles: [], enemyProjectiles: [], zones: [], telegraphs: [],
+    enemies: [], projectiles: [], enemyProjectiles: [], zones: [], hazards: [], telegraphs: [],
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
     sustains: [], traps: [],
     relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false,

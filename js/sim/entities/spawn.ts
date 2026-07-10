@@ -23,7 +23,7 @@ export function spawnEnemy(
   const hp = Math.round(def.hp * (opts.hpMult || 1));
   const e: EnemyState = {
     uid: game.enemyIds.next(), def, x, y, hp, maxHp: hp, r: def.radius,
-    statuses: {}, state: 'spawn', stateT: 0.7, hitFlash: 0, freeze: 0, stun: 0, root: 0,
+    statuses: {}, state: 'spawn', stateT: 0.7, hitFlash: 0, freeze: 0, stun: 0, root: 0, frenzy: 0,
     kvx: 0, kvy: 0, kt: 0, touchCd: 0, mark: null,
     wobble: game.rng.range(0, Math.PI * 2), dead: false,
     campRef: opts.campRef || null,

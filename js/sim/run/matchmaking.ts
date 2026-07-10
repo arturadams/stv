@@ -82,7 +82,7 @@ export function matchmakingFallback(game: GameState): void {
   game.banner = { title: 'NO RIVAL SOUL ANSWERED THE CALL', sub: 'A guardian has awakened instead', t: 3 };
   const threat = threatOf(game);
   const pt = spawnPointNear(game, 480, 600);
-  spawnEnemy(game, 'guardian', pt.x, pt.y, { hpMult: 1 + threat * 0.15 });
+  spawnEnemy(game, worldDef(game).guardian, pt.x, pt.y, { hpMult: 1 + threat * 0.15 });
   for (let i = 0; i < 3; i++) {
     const q = spawnPointNear(game, 420, 560);
     spawnEnemy(game, worldDef(game).tiers[0].id, q.x, q.y, { hpMult: 1 + threat * 0.1 });

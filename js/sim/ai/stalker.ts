@@ -16,7 +16,12 @@ registerBehavior<StalkerState>('stalker', {
     if (e.state === 'vanish') {
       e.stateT -= dt;
       if (e.stateT <= 0) {
-        const a = game.rng.range(0, Math.PI * 2);
+        // reappear on the player's escape route: biased toward where they're
+        // moving, so running in a straight line hands it the ambush
+        const moving = Math.hypot(p.vx, p.vy) > 40;
+        const a = moving
+          ? Math.atan2(p.vy, p.vx) + game.rng.range(-0.9, 0.9)
+          : game.rng.range(0, Math.PI * 2);
         e.x = p.x + Math.cos(a) * 170;
         e.y = p.y + Math.sin(a) * 170;
         e.state = 'active';

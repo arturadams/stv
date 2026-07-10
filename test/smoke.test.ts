@@ -84,9 +84,9 @@ describe('forced headless paths', () => {
     advanceWorld(game, { seed: 405 });
     const before = game.runTime;
     // 120s gives the ambient spawner real odds of producing World II's
-    // higher-threat tiers (stalker, cinder_knight's chained lunge, mortar's
-    // telegraphed artillery, imp's deathBurst) so their behaviors actually
-    // run, not just world 1's.
+    // higher-threat tiers (stalker, shardling's death-split, the cinder
+    // ram's intercept charge, mortar's led artillery, imp's deathBurst) so
+    // their behaviors actually run, not just world 1's.
     stepGame(game, 120, 406);
 
     expect(game.world).toBe(2);

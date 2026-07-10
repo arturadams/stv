@@ -12,6 +12,7 @@ import { gainOpportunity, gainRage } from './player.js';
 import { floater, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
+import { spawnEnemy } from './entities/spawn.js';
 import type { CombatCtx, GameState } from './types.js';
 import type { FeatureState } from './map/features.js';
 
@@ -225,6 +226,19 @@ export function killEnemy(
       life: 0.4,
     });
     sfx('boom');
+  }
+  if (enemy.def.deathSpawn) {
+    const split = enemy.def.deathSpawn;
+    for (let i = 0; i < split.count; i++) {
+      const angle = (i / split.count) * Math.PI * 2 + game.rng.range(0, 0.8);
+      spawnEnemy(
+        game,
+        split.id,
+        enemy.x + Math.cos(angle) * (enemy.r + 6),
+        enemy.y + Math.sin(angle) * (enemy.r + 6),
+      );
+    }
+    sfx('summon');
   }
   if (enemy.def.elite || enemy.def.rival) {
     game.pickups.push({

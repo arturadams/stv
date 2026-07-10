@@ -2,6 +2,7 @@ import { updateBasicAttack } from './basicAttack.js';
 import { updateAlly } from './ai/ally.js';
 import { updateEnemy } from './ai/index.js';
 import { updateCosmetics } from './entities/cosmetics.js';
+import { updateHazards } from './entities/hazards.js';
 import { updatePickups } from './entities/pickups.js';
 import { updateProjectiles } from './entities/projectiles.js';
 import { updateSummons } from './entities/summons.js';
@@ -104,6 +105,7 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
 
   updateProjectiles(game, dt);
   updateZones(game, dt);
+  updateHazards(game, dt);
   updateTelegraphs(game, dt);
   updateSummons(game, dt);
   updatePickups(game, dt);

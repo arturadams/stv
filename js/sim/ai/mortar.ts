@@ -1,5 +1,6 @@
 import { sfx } from '../../audio.js';
 import { damagePlayer } from '../combat.js';
+import { leadPoint } from './aim.js';
 import { registerBehavior } from './registry.js';
 
 interface MortarState {
@@ -18,8 +19,10 @@ registerBehavior<MortarState>('mortar', {
     state.fireT -= dt;
     if (state.fireT <= 0 && t.dist < e.def.range!) {
       state.fireT = e.def.fireRate!;
-      const tx = p.x + game.rng.range(-40, 40);
-      const ty = p.y + game.rng.range(-40, 40);
+      // lob at where the player is heading, not where they stand
+      const aim = leadPoint(p, e.def.mortarTel! * 0.55);
+      const tx = aim.x + game.rng.range(-30, 30);
+      const ty = aim.y + game.rng.range(-30, 30);
       const def = e.def;
       game.telegraphs.push({
         shape: 'circle', x: tx, y: ty, r: def.mortarR!, t: 0, dur: def.mortarTel!, color: def.glow,

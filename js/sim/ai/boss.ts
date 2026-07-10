@@ -3,6 +3,7 @@ import { damagePlayer } from '../combat.js';
 import { shake } from '../fx.js';
 import { spawnEnemy } from '../entities/spawn.js';
 import type { CardInstance } from '../../data/types.js';
+import { leadPoint } from './aim.js';
 import { touchAttack } from './index.js';
 import { registerBehavior } from './registry.js';
 
@@ -49,9 +50,11 @@ registerBehavior<BossState>('boss', {
       }
       sfx('summon');
     } else if (atk === 'pages') {
+      // slam lines dropped across the player's predicted path
+      const aim = leadPoint(p, 0.9);
       for (let i = 0; i < 3; i++) {
-        const x = p.x + (i - 1) * 190 + game.rng.range(-40, 40);
-        const y = p.y;
+        const x = aim.x + (i - 1) * 190 + game.rng.range(-40, 40);
+        const y = aim.y;
         game.telegraphs.push({
           shape: 'rect', x, y, w: 130, h: 460, t: 0, dur: 1.15 + i * 0.18, color: '#ffd97a',
           onDone: (g) => {
@@ -65,11 +68,12 @@ registerBehavior<BossState>('boss', {
       sfx('tel');
     } else if (atk === 'runes') {
       const n = state.phase === 2 ? 4 : 3;
+      const aim = leadPoint(p, 0.8);
       for (let i = 0; i < n; i++) {
         const ang = game.rng.range(0, Math.PI * 2);
         const d = game.rng.float() * 160;
-        const x = p.x + Math.cos(ang) * d;
-        const y = p.y + Math.sin(ang) * d;
+        const x = aim.x + Math.cos(ang) * d;
+        const y = aim.y + Math.sin(ang) * d;
         game.telegraphs.push({
           shape: 'circle', x, y, r: 130, t: 0, dur: 1.3 + i * 0.15, color: '#c23b4a',
           onDone: (g) => {

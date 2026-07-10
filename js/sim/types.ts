@@ -153,7 +153,19 @@ interface TelegraphBase extends Vec2 {
 
 export type Telegraph =
   | (TelegraphBase & { shape: 'circle'; r: number })
-  | (TelegraphBase & { shape: 'rect'; w: number; h: number });
+  | (TelegraphBase & { shape: 'rect'; w: number; h: number; ang?: number })
+  | (TelegraphBase & { shape: 'ring'; r: number; band: number });
+
+// ground left burning (or inked) by an enemy — hurts the player standing in it
+export interface GroundHazard extends Vec2 {
+  r: number;
+  t: number;
+  dur: number;
+  dmg: number;
+  tickT: number;
+  color: string;
+  kind: 'ember' | 'ink';
+}
 
 export interface Trap extends Vec2 {
   r: number;
@@ -225,7 +237,7 @@ interface FxBase {
 
 export type Fx =
   | (FxBase & Vec2 & { kind: 'ring' | 'blast' | 'spawn'; r: number })
-  | (FxBase & Vec2 & { kind: 'rectblast'; w: number; h: number })
+  | (FxBase & Vec2 & { kind: 'rectblast'; w: number; h: number; ang?: number })
   | (FxBase & Vec2 & { kind: 'arc'; ang: number; arc: number; range: number })
   | (FxBase & { kind: 'bolt' | 'streak'; x1: number; y1: number; x2: number; y2: number })
   | (FxBase & Vec2 & { kind: 'cast' });
@@ -278,6 +290,7 @@ export interface GameState {
   projectiles: Projectile[];
   enemyProjectiles: EnemyProjectile[];
   zones: Zone[];
+  hazards: GroundHazard[];
   telegraphs: Telegraph[];
   summons: Summon[];
   pickups: Pickup[];

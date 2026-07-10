@@ -109,7 +109,10 @@ export function engageBossGate(game: FeatureState, landmark: Landmark): void {
     landmark,
   };
   const threat = threatOf(game);
-  const bossId = worldDef(game).boss;
+  // gates cycle through the world's three bosses, so no two consecutive
+  // gates stage the same fight
+  const bosses = worldDef(game).bosses;
+  const bossId = bosses[game.bossesSlain % bosses.length];
   game.activeBoss = spawnEnemy(
     game,
     bossId,

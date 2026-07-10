@@ -44,6 +44,8 @@ export function classChannelMult(game: ChannelMultState, def: CardDef): number {
 // ═══ movement, dash, and the card-granted dash override ═══
 export function updatePlayer(game: GameState, dt: number, input: Input): void {
   const p = game.player;
+  const px0 = p.x;
+  const py0 = p.y;
   let mx = 0;
   let my = 0;
   if (input.left) mx -= 1;
@@ -108,6 +110,13 @@ export function updatePlayer(game: GameState, dt: number, input: Input): void {
     }
   }
   clampToRegion(game, p);
+
+  // smoothed velocity — enemies that lead their shots read this
+  if (dt > 0) {
+    const k = Math.min(1, dt * 10);
+    p.vx += ((p.x - px0) / dt - p.vx) * k;
+    p.vy += ((p.y - py0) / dt - p.vy) * k;
+  }
 
   if (mlen > 0) p.facing = Math.atan2(my, mx);
   const t = nearestEnemy(game, p.x, p.y);

@@ -428,7 +428,16 @@ export type BehaviorId =
   | 'stalker'
   | 'mortar'
   | 'lunge'
+  | 'charger'
+  | 'geyser'
+  | 'stoker'
+  | 'warden'
   | 'boss'
+  | 'boss_leviathan'
+  | 'boss_king'
+  | 'boss_sovereign'
+  | 'boss_colossus'
+  | 'boss_phoenix'
   | 'rival';
 
 export type ClassId = 'mage' | 'warrior' | 'rogue';
@@ -511,6 +520,16 @@ export interface EnemyDef {
   summonEvery?: number;
   summonId?: string;
   deathBurst?: ExplosionSpec;
+  deathSpawn?: { id: string; count: number };
+  chargeRange?: number;
+  chargeTel?: number;
+  chargeSpeed?: number;
+  chargeDist?: number;
+  ventEvery?: number;
+  ventR?: number;
+  ventDmg?: number;
+  stokeEvery?: number;
+  stokeR?: number;
   boss?: boolean;
   minion?: string;
   elite?: boolean;
@@ -559,6 +578,7 @@ export interface EnemyState {
   freeze: number;
   stun: number;
   root: number;
+  frenzy: number;
   kvx: number;
   kvy: number;
   kt: number;
@@ -643,7 +663,10 @@ export interface WorldDef {
   sub: string;
   sky: string;
   biomes: readonly string[];
-  boss: string;
+  // each boss gate in a world cycles through these — three originals per world
+  bosses: readonly string[];
+  // the elite that answers when matchmaking finds no rival soul
+  guardian: string;
   threatMult: number;
   tiers: readonly EnemyTier[];
 }

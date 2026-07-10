@@ -13,7 +13,16 @@ import './exploder.js';
 import './stalker.js';
 import './mortar.js';
 import './lunge.js';
+import './charger.js';
+import './geyser.js';
+import './stoker.js';
+import './warden.js';
 import './boss.js';
+import './leviathan.js';
+import './king.js';
+import './sovereign.js';
+import './colossus.js';
+import './phoenix.js';
 import './rival.js';
 
 export function touchAttack(game: GameState, e: EnemyState, dist: number, dt: number): void {
@@ -73,6 +82,10 @@ export function updateEnemy(game: GameState, e: EnemyState, dt: number): void {
   }
   const rooted = e.root > 0;
   if (rooted) e.root -= dt;
+  if (e.frenzy > 0) {
+    e.frenzy -= dt;
+    slowFactor *= 1.45; // stoked by a Bellows Cantor
+  }
 
   for (const ch of chunksNear(game, e.x, e.y, 1)) {
     for (const pool of ch.pools) {
