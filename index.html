@@ -40,8 +40,6 @@
       <div id="banner-title"></div>
       <div id="banner-sub"></div>
     </div>
-    <div id="pause-note" class="hidden">PAUSED — press P to resume</div>
-
     <!-- the enlarged pop of whatever card just started casting -->
     <div id="card-pop"></div>
 
@@ -120,6 +118,20 @@
       <div id="enc-buttons">
         <button id="fight-btn">FIGHT</button>
         <button id="party-btn">PARTY UP</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause-overlay" class="overlay hidden">
+    <div class="reward-frame">
+      <div class="reward-sigil">⏸</div>
+      <h2>PAUSED</h2>
+      <div id="pause-stats"></div>
+      <div id="pause-buttons">
+        <button id="resume-btn">RESUME</button>
+        <button id="mute-btn">MUTE</button>
+        <button id="quit-btn">ABANDON RUN</button>
       </div>
     </div>
   </div>

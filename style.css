@@ -129,12 +129,6 @@ html, body {
 #banner.banner-in #banner-title { animation: banner-in 0.6s cubic-bezier(0.2, 1.4, 0.4, 1); }
 @keyframes banner-in { from { transform: scale(1.6); opacity: 0; letter-spacing: 26px; } }
 
-#pause-note {
-  position: absolute; top: 46%; left: 0; right: 0; text-align: center;
-  font-size: 20px; letter-spacing: 5px; color: var(--gold);
-  text-shadow: 0 2px 4px #000;
-}
-
 /* ═══ the card pipeline ═══ */
 #pipeline {
   position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%);
@@ -521,5 +515,7 @@ button:hover {
 #enc-cards .card.full .card-art { height: 84px; }
 #enc-cards .card.full .card-glyph { font-size: 42px; }
 #enc-buttons { display: flex; gap: 20px; justify-content: center; }
+#pause-buttons { display: flex; gap: 18px; justify-content: center; }
+#quit-btn { border-color: #c23b4a; color: #ff8f9a; }
 #fight-btn { border-color: var(--crimson); color: #ff9aa6; }
 #fight-btn:hover { box-shadow: 0 0 30px rgba(194, 59, 74, 0.5), inset 0 1px 0 rgba(255, 154, 166, 0.4); }

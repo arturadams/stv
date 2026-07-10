@@ -71,7 +71,7 @@ export interface Camera extends Vec2 {
 }
 
 export interface MatchmakingState {
-  state: 'idle' | 'searching' | 'choice' | 'duel' | 'party';
+  state: 'idle' | 'searching' | 'choice' | 'denied' | 'duel' | 'party';
   nextT: number;
   searchT: number;
   timeout: number;
@@ -292,6 +292,7 @@ export interface GameState {
   hasCrossClass: boolean;
   camera: Camera;
   chunks: Map<string, Chunk>;
+  portalOpen: boolean;
   zoneRegion: ZoneRegion | null;
   activeBoss: EnemyState | null;
   mm: MatchmakingState;

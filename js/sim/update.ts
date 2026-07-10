@@ -13,7 +13,7 @@ import { floater } from './fx.js';
 import { CHUNK, biomeOf, chunksNear, worldDef } from './map/chunks.js';
 import { updateWorldFeatures } from './map/features.js';
 import { updatePlayer } from './player.js';
-import { updateMatchmaking } from './run/matchmaking.js';
+import { updateDeniedEncounter, updateMatchmaking } from './run/matchmaking.js';
 import { updateAmbientSpawns } from './run/spawning.js';
 import type { GameState, Input } from './types.js';
 
@@ -37,6 +37,7 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
     if (game.rival) game.rival.wob = (game.rival.wob || 0) + dt;
     updateCosmetics(game, dt);
     updateStateLabel(game);
+    if (game.mm.state === 'denied') updateDeniedEncounter(game, dt);
     if (game.banner) {
       game.banner.t -= dt;
       if (game.banner.t <= 0) game.banner = null;

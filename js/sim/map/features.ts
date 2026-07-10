@@ -129,7 +129,12 @@ export function bossCleared(game: FeatureState): void {
   const landmark = game.zoneRegion?.landmark;
   if (landmark) {
     landmark.cleared = true;
-    landmark.portal = game.world < WORLDS.length;
+    // only the first boss gate cleared each world opens a portal — later
+    // gates still fight/reward normally, they just don't add a second exit
+    if (!game.portalOpen && game.world < WORLDS.length) {
+      landmark.portal = true;
+      game.portalOpen = true;
+    }
   }
   game.zoneRegion = null;
   game.activeBoss = null;

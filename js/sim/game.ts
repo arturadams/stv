@@ -43,6 +43,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false,
     camera: { x: 0, y: 0, shake: 0 },
     chunks: new Map(),
+    portalOpen: false,
     zoneRegion: null,
     activeBoss: null,
     // matchmaking / rival encounters

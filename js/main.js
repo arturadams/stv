@@ -6,6 +6,9 @@ import { initAudio, toggleMute } from './audio.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const pauseOverlay = document.getElementById('pause-overlay');
+const pauseStats = document.getElementById('pause-stats');
+const muteBtn = document.getElementById('mute-btn');
 
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -30,19 +33,42 @@ const KEYMAP = {
   KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
 };
 
+function setPaused(v) {
+  paused = v;
+  pauseOverlay.classList.toggle('hidden', !paused);
+  if (paused) {
+    const mins = Math.floor(game.runTime / 60), secs = Math.floor(game.runTime % 60);
+    pauseStats.innerHTML = `
+      <span>❂ world ${game.world}</span>
+      <span>☠ ${game.kills} unmade</span>
+      <span>⌛ ${mins}:${String(secs).padStart(2, '0')}</span>`;
+  }
+}
+
+function setMuted(m) {
+  muteBtn.textContent = m ? 'UNMUTE' : 'MUTE';
+}
+
 window.addEventListener('keydown', (e) => {
   initAudio();
   const k = KEYMAP[e.code];
   if (k) { input[k] = true; e.preventDefault(); }
   if (e.code === 'Space') { input.dash = true; e.preventDefault(); }
   if (e.code === 'KeyP' || e.code === 'Escape') {
-    if (game.state === 'combat') { paused = !paused; document.getElementById('pause-note').classList.toggle('hidden', !paused); }
+    if (game.state === 'combat') setPaused(!paused);
   }
-  if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyM') setMuted(toggleMute());
   if (e.code === 'Enter' && game.state === 'title') {
     const setupOpen = !document.getElementById('setup-overlay').classList.contains('hidden');
     document.getElementById(setupOpen ? 'enter-btn' : 'start-btn').click();
   }
+});
+document.getElementById('resume-btn').addEventListener('click', () => setPaused(false));
+document.getElementById('mute-btn').addEventListener('click', () => setMuted(toggleMute()));
+document.getElementById('quit-btn').addEventListener('click', () => {
+  setPaused(false);
+  game.state = 'title';
+  document.getElementById('title-overlay').classList.remove('hidden');
 });
 window.addEventListener('keyup', (e) => {
   const k = KEYMAP[e.code];

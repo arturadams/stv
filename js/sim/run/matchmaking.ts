@@ -94,14 +94,28 @@ export function resolveEncounterChoice(game: GameState, mine: 'fight' | 'party')
   const mm = game.mm;
   if (mm.state !== 'choice' || !game.rival) return;
   const rivalWants = game.rng.chance(0.55) ? 'party' : 'fight';
-  game.encounterPause = false;
-  if (mine === 'fight' || rivalWants === 'fight') {
-    if (mine !== 'fight') game.banner = { title: 'THE RIVAL DRAWS STEEL', sub: `${game.rival.name} refuses your pact`, t: 2.4 };
-    startDuel(game);
-  } else {
-    startParty(game);
+  if (mine !== 'fight' && rivalWants === 'fight') {
+    // rival denied the pact — hold the world a beat so the denial banner is
+    // actually seen, instead of the duel banner overwriting it same-frame
+    mm.state = 'denied';
+    mm.searchT = 1.6;
+    game.banner = { title: 'THE RIVAL DRAWS STEEL', sub: `${game.rival.name} refuses your pact`, t: 1.6 };
+    game.uiDirty = true;
+    return;
   }
+  game.encounterPause = false;
+  if (mine === 'fight' || rivalWants === 'fight') startDuel(game);
+  else startParty(game);
   game.uiDirty = true;
+}
+
+export function updateDeniedEncounter(game: GameState, dt: number): void {
+  const mm = game.mm;
+  mm.searchT -= dt;
+  if (mm.searchT <= 0) {
+    game.encounterPause = false;
+    startDuel(game);
+  }
 }
 
 function startDuel(game: GameState): void {
