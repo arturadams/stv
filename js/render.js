@@ -2,7 +2,7 @@
 // Dark arcane fantasy: parchment, ink, gold foil, ritual circles — now painted
 // over an infinite chunk-generated realm.
 
-import { CHUNK, getChunk, colorOf, worldDef } from './world.js';
+import { CHUNK, getChunk, colorOf, worldDef, worldTheme } from './world.js';
 import { ELEMENT_COLORS, SCHOOL_COLORS, CLASSES } from './data.js';
 
 const RUNE_GLYPHS = '✦✧☽☾♁♆⚶⚸☿♄✺❖'.split('');
@@ -10,6 +10,12 @@ const RUNE_GLYPHS = '✦✧☽☾♁♆⚶⚸☿♄✺❖'.split('');
 // ── chunk floor cache ──
 const chunkCanvases = new Map(); // key -> canvas
 const CHUNK_CACHE_MAX = 90;
+
+// positive modulo — JS % keeps the dividend's sign, and animation cycles
+// seeded from world coordinates go negative west/north of the origin
+function cycle(v, span) {
+  return ((v % span) + span) % span;
+}
 
 function tileHash(x, y, seed) {
   let h = (x | 0) * 73856093 ^ (y | 0) * 19349663 ^ (seed | 0) * 83492791;
@@ -22,10 +28,25 @@ function makeChunkCanvas(game, ch) {
   c.width = CHUNK; c.height = CHUNK;
   const g = c.getContext('2d');
   const b = ch.biome;
-  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
-
-  g.fillStyle = `rgb(${fr},${fg},${fb})`;
+  g.fillStyle = `rgb(${b.floor[0]},${b.floor[1]},${b.floor[2]})`;
   g.fillRect(0, 0, CHUNK, CHUNK);
+  if (b.theme === 'ember') paintEmberFloor(game, g, ch);
+  else if (b.theme === 'abyss') paintAbyssFloor(game, g, ch);
+  else paintArcaneFloor(game, g, ch);
+  paintDeco(g, ch);
+  for (const p of ch.pools) paintPool(g, ch, p);
+  return c;
+}
+
+function ellipsePath(g, x, y, rx, ry, rot = 0) {
+  g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2);
+}
+
+// World I floor: worked stone tiles, some broken — and on some chunks the
+// ghost of an old ritual circle, inlaid before the realm sank.
+function paintArcaneFloor(game, g, ch) {
+  const b = ch.biome;
+  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
   const tile = 112;
   const tx0 = ch.cx * CHUNK / tile, ty0 = ch.cy * CHUNK / tile;
   for (let ty = 0; ty < CHUNK / tile; ty++) {
@@ -39,39 +60,214 @@ function makeChunkCanvas(game, ch) {
       }
     }
   }
-  // grout
   g.strokeStyle = b.grout; g.lineWidth = 3;
   for (let x = 0; x <= CHUNK; x += tile) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, CHUNK); g.stroke(); }
   for (let y = 0; y <= CHUNK; y += tile) { g.beginPath(); g.moveTo(0, y); g.lineTo(CHUNK, y); g.stroke(); }
+  if (tileHash(ch.cx, ch.cy, game.worldSeed + 9) < 0.2) {
+    const px = CHUNK * (0.3 + 0.4 * tileHash(ch.cx, ch.cy, game.worldSeed + 10));
+    const py = CHUNK * (0.3 + 0.4 * tileHash(ch.cx, ch.cy, game.worldSeed + 11));
+    const r = 90 + 70 * tileHash(ch.cx, ch.cy, game.worldSeed + 12);
+    g.strokeStyle = hexA(b.accent, 0.09); g.lineWidth = 3;
+    g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 1.5;
+    g.beginPath(); g.arc(px, py, r * 0.72, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = hexA(b.accent, 0.08); g.font = '17px Georgia, serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.fillText(b.deco[i % b.deco.length], px + Math.cos(a) * r * 0.86, py + Math.sin(a) * r * 0.86);
+    }
+  }
+}
 
+// crack seams follow global step indices so they meet cleanly across chunks
+function crackSeam(g, ch, fixed, vertical, seed) {
+  const step = 28;
+  const fixedIdx = Math.round((vertical ? ch.cx * CHUNK : ch.cy * CHUNK) / step) + Math.round(fixed / step);
+  g.beginPath();
+  for (let v = 0; v <= CHUNK; v += step) {
+    const runIdx = Math.round(((vertical ? ch.cy * CHUNK : ch.cx * CHUNK) + v) / step);
+    const off = (tileHash(fixedIdx, runIdx, seed) - 0.5) * 12;
+    const x = vertical ? fixed + off : v;
+    const y = vertical ? v : fixed + off;
+    if (v === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  }
+  g.stroke();
+}
+
+// World II floor: basalt plates split by crack seams; a few still carry heat,
+// and ash banks drift over the scorched ones.
+function paintEmberFloor(game, g, ch) {
+  const b = ch.biome;
+  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
+  const tile = 140;
+  const n = CHUNK / tile;
+  const tx0 = ch.cx * n, ty0 = ch.cy * n;
+  for (let ty = 0; ty < n; ty++) {
+    for (let tx = 0; tx < n; tx++) {
+      const v = tileHash(tx0 + tx, ty0 + ty, game.worldSeed);
+      g.fillStyle = `rgb(${fr + v * vr | 0}, ${fg + v * vg | 0}, ${fb + v * vb | 0})`;
+      g.fillRect(tx * tile, ty * tile, tile, tile);
+      if (tileHash(tx0 + tx, ty0 + ty, game.worldSeed + 5) < 0.16) { // scorched plate
+        g.fillStyle = 'rgba(6,2,1,0.55)';
+        g.fillRect(tx * tile, ty * tile, tile, tile);
+      }
+    }
+  }
+  g.strokeStyle = 'rgba(5,2,1,0.9)'; g.lineWidth = 3;
+  for (let i = 0; i <= n; i++) {
+    crackSeam(g, ch, i * tile, true, game.worldSeed + 21);
+    crackSeam(g, ch, i * tile, false, game.worldSeed + 22);
+  }
+  // a few seams in the open rock still glow
+  for (let i = 0; i < 3; i++) {
+    const h1 = tileHash(ch.cx * 3 + i, ch.cy, game.worldSeed + 31);
+    const h2 = tileHash(ch.cx, ch.cy * 3 + i, game.worldSeed + 32);
+    if (h1 > 0.55) continue;
+    const x = 60 + h1 * (CHUNK - 120), y = 60 + h2 * (CHUNK - 120);
+    const steps = 4;
+    const pts = [];
+    for (let s = 0; s <= steps; s++) {
+      pts.push({
+        x: x + (h2 - 0.5) * 180 * (s / steps) + (tileHash(i * 5 + s, ch.cx, game.worldSeed + 33) - 0.5) * 24,
+        y: y + (h1 - 0.5) * 180 * (s / steps) + (tileHash(ch.cy, i * 5 + s, game.worldSeed + 34) - 0.5) * 24,
+      });
+    }
+    for (const pass of [[7, 0.05], [2, 0.22]]) {
+      g.strokeStyle = hexA(b.accent, pass[1]); g.lineWidth = pass[0];
+      g.beginPath();
+      pts.forEach((p, s) => { if (s === 0) g.moveTo(p.x, p.y); else g.lineTo(p.x, p.y); });
+      g.stroke();
+    }
+  }
+  for (let i = 0; i < 5; i++) {
+    const hx = tileHash(ch.cx * 5 + i, ch.cy + i, game.worldSeed + 41);
+    const hy = tileHash(ch.cx + i, ch.cy * 5 + i, game.worldSeed + 42);
+    g.fillStyle = 'rgba(120,110,105,0.05)';
+    ellipsePath(g, hx * CHUNK, hy * CHUNK, 40 + hx * 60, 20 + hy * 30, hx * Math.PI);
+    g.fill();
+  }
+}
+
+// World III floor: broad marble slabs, pale and veined; silt gathers in the
+// low corners and algae stains where the current slows.
+function paintAbyssFloor(game, g, ch) {
+  const b = ch.biome;
+  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
+  const tile = 140;
+  const n = CHUNK / tile;
+  const tx0 = ch.cx * n, ty0 = ch.cy * n;
+  for (let ty = 0; ty < n; ty++) {
+    for (let tx = 0; tx < n; tx++) {
+      const v = tileHash(tx0 + tx, ty0 + ty, game.worldSeed);
+      const sx = tx * tile, sy = ty * tile;
+      g.fillStyle = `rgb(${fr + v * vr | 0}, ${fg + v * vg | 0}, ${fb + v * vb | 0})`;
+      g.fillRect(sx + 1, sy + 1, tile - 2, tile - 2);
+      g.strokeStyle = 'rgba(230,238,244,0.07)'; g.lineWidth = 1.2;
+      for (let k = 0; k < 2; k++) { // marble veins
+        const h1 = tileHash(tx0 + tx, (ty0 + ty) * 3 + k, game.worldSeed + 51);
+        const h2 = tileHash((tx0 + tx) * 3 + k, ty0 + ty, game.worldSeed + 52);
+        g.beginPath();
+        g.moveTo(sx + h1 * tile, sy);
+        g.quadraticCurveTo(sx + h2 * tile, sy + tile * 0.5, sx + h1 * tile * 0.6 + 20, sy + tile);
+        g.stroke();
+      }
+      if (tileHash(tx0 + tx, ty0 + ty, game.worldSeed + 5) < 0.1) { // sunken slab
+        g.fillStyle = 'rgba(3,10,14,0.4)';
+        g.fillRect(sx + 1, sy + 1, tile - 2, tile - 2);
+      }
+    }
+  }
+  g.strokeStyle = b.grout; g.lineWidth = 2;
+  for (let x = 0; x <= CHUNK; x += tile) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, CHUNK); g.stroke(); }
+  for (let y = 0; y <= CHUNK; y += tile) { g.beginPath(); g.moveTo(0, y); g.lineTo(CHUNK, y); g.stroke(); }
+  for (let i = 0; i < 6; i++) {
+    const hx = tileHash(ch.cx * 5 + i, ch.cy + i, game.worldSeed + 61);
+    const hy = tileHash(ch.cx + i, ch.cy * 5 + i, game.worldSeed + 62);
+    g.fillStyle = i % 2 ? 'rgba(6,22,24,0.16)' : hexA(b.accent, 0.03);
+    ellipsePath(g, hx * CHUNK, hy * CHUNK, 34 + hx * 55, 16 + hy * 26, hy * Math.PI);
+    g.fill();
+  }
+}
+
+// scattered litter — cards everywhere, this realm runs on them — but each
+// world weathers them its own way: parchment, char, waterlogged pulp.
+function paintDeco(g, ch) {
+  const b = ch.biome;
   const bx = ch.cx * CHUNK, by = ch.cy * CHUNK;
-  // scattered deco: torn cards & worn runes
   for (const d of ch.deco) {
     g.save(); g.translate(d.x - bx, d.y - by); g.rotate(d.rot);
     if (d.kind === 'card') {
-      g.fillStyle = 'rgba(210,196,160,0.10)';
+      if (b.theme === 'ember') {
+        g.fillStyle = 'rgba(22,12,9,0.6)';
+        g.strokeStyle = hexA(b.accent, 0.2);
+      } else if (b.theme === 'abyss') {
+        g.fillStyle = 'rgba(208,226,220,0.09)';
+        g.strokeStyle = hexA(b.accent, 0.14);
+      } else {
+        g.fillStyle = 'rgba(210,196,160,0.10)';
+        g.strokeStyle = 'rgba(217,180,91,0.12)';
+      }
       g.fillRect(-11, -16, 22, 32);
-      g.strokeStyle = 'rgba(217,180,91,0.12)'; g.lineWidth = 1; g.strokeRect(-11, -16, 22, 32);
-      g.fillStyle = 'rgba(217,180,91,0.14)'; g.font = '13px Georgia, serif';
+      g.lineWidth = 1; g.strokeRect(-11, -16, 22, 32);
+      g.fillStyle = b.theme === 'arcane' ? 'rgba(217,180,91,0.14)' : hexA(b.accent, 0.16);
+      g.font = '13px Georgia, serif';
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(b.deco[d.g % b.deco.length], 0, 2);
     } else {
-      g.fillStyle = hexA(b.accent, 0.10); g.font = '22px Georgia, serif';
+      g.fillStyle = hexA(b.accent, b.theme === 'arcane' ? 0.10 : 0.14);
+      g.font = '22px Georgia, serif';
       g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(b.deco[d.g % b.deco.length], 0, 0);
     }
     g.restore();
   }
-  // hazard pools baked into the floor
-  for (const p of ch.pools) {
-    g.save();
-    g.fillStyle = b.hazard;
-    g.beginPath(); g.ellipse(p.x - bx, p.y - by, p.r, p.r * 0.82, 0, 0, Math.PI * 2); g.fill();
+}
+
+// pools baked into the floor: ink wells, lava fissures, standing seawater
+function paintPool(g, ch, p) {
+  const b = ch.biome;
+  const x = p.x - ch.cx * CHUNK, y = p.y - ch.cy * CHUNK;
+  g.save();
+  if (b.theme === 'ember') {
+    g.fillStyle = 'rgba(8,3,2,0.9)'; // cooled crust ring
+    ellipsePath(g, x, y, p.r * 1.12, p.r * 0.92); g.fill();
+    const grad = g.createRadialGradient(x, y, p.r * 0.1, x, y, p.r);
+    grad.addColorStop(0, '#ffdf9e');
+    grad.addColorStop(0.45, b.accent);
+    grad.addColorStop(1, 'rgba(60,10,2,0.95)');
+    g.fillStyle = grad;
+    ellipsePath(g, x, y, p.r, p.r * 0.82); g.fill();
+    g.fillStyle = 'rgba(14,5,3,0.75)'; // crust islands riding the melt
+    for (let i = 0; i < 4; i++) {
+      const h1 = tileHash(p.x + i, p.y, 71), h2 = tileHash(p.x, p.y + i, 72);
+      ellipsePath(g, x + (h1 - 0.5) * p.r * 1.1, y + (h2 - 0.5) * p.r * 0.8,
+        p.r * (0.12 + h1 * 0.14), p.r * (0.08 + h2 * 0.1), h1 * Math.PI);
+      g.fill();
+    }
+  } else if (b.theme === 'abyss') {
+    // deep water: darkest at the middle, where the floor falls away
+    const grad = g.createRadialGradient(x, y, p.r * 0.15, x, y, p.r);
+    grad.addColorStop(0, 'rgba(1,6,12,0.96)');
+    grad.addColorStop(0.75, b.hazard);
+    grad.addColorStop(1, 'rgba(10,32,36,0.85)');
+    g.fillStyle = grad;
+    ellipsePath(g, x, y, p.r, p.r * 0.85); g.fill();
     g.strokeStyle = b.hazardEdge; g.lineWidth = 2;
-    g.beginPath(); g.ellipse(p.x - bx, p.y - by, p.r, p.r * 0.82, 0, 0, Math.PI * 2); g.stroke();
-    g.restore();
+    ellipsePath(g, x, y, p.r, p.r * 0.85); g.stroke();
+    g.strokeStyle = 'rgba(220,242,238,0.10)'; g.lineWidth = 1.5;
+    ellipsePath(g, x, y, p.r * 0.8, p.r * 0.66); g.stroke();
+    g.strokeStyle = 'rgba(226,246,242,0.16)'; g.lineWidth = 2; // cold rim glint
+    g.beginPath(); g.ellipse(x, y, p.r * 0.92, p.r * 0.77, 0, Math.PI * 1.15, Math.PI * 1.6); g.stroke();
+  } else {
+    g.fillStyle = b.hazard;
+    ellipsePath(g, x, y, p.r, p.r * 0.82); g.fill();
+    g.strokeStyle = b.hazardEdge; g.lineWidth = 2;
+    ellipsePath(g, x, y, p.r, p.r * 0.82); g.stroke();
+    g.strokeStyle = hexA(b.accent, 0.08); g.lineWidth = 1.5;
+    ellipsePath(g, x, y, p.r * 0.7, p.r * 0.56); g.stroke();
   }
-  return c;
+  g.restore();
 }
 
 function chunkCanvasFor(game, ch) {
@@ -117,7 +313,7 @@ export function render(game, ctx, W, H) {
   for (const ch of visible) drawChunkLife(game, ctx, ch, t);
   drawPortal(game, ctx, t);
   drawRegionBoundary(game, ctx, t);
-  if (worldDef(game).num === 3) drawMarineSnow(game, ctx, t, W, H, scale);
+  drawAtmosphere(game, ctx, t, W, H, scale);
   for (const hz of game.hazards) drawHazard(ctx, hz, t);
   for (const z of game.zones) drawZone(ctx, z, t);
   for (const tr of game.traps) drawTrap(ctx, tr, t);
@@ -137,7 +333,50 @@ export function render(game, ctx, W, H) {
 
   ctx.restore();
 
+  drawWorldTint(ctx, worldTheme(game), W, H, t);
   drawCompass(game, ctx, W, H, scale);
+}
+
+// each world grades the frame: indigo archive dusk, furnace-light from below,
+// and in the drowned courts the surface far overhead lets shafts of day in
+function drawWorldTint(ctx, theme, W, H, t) {
+  ctx.save();
+  if (theme === 'abyss') {
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const drift = Math.sin(t * 0.08 + i * 2.1) * W * 0.12;
+      const x = W * (0.2 + i * 0.3) + drift;
+      const wobble = 0.04 + 0.02 * Math.sin(t * 0.15 + i * 1.4);
+      const sh = ctx.createLinearGradient(x - W * 0.16, 0, x + W * 0.05, H);
+      sh.addColorStop(0, 'rgba(0,0,0,0)');
+      sh.addColorStop(0.45, `rgba(120,190,200,${wobble})`);
+      sh.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = sh;
+      ctx.save();
+      ctx.translate(x, 0); ctx.rotate(0.22); ctx.translate(-x, 0);
+      ctx.fillRect(x - W * 0.2, -H * 0.2, W * 0.28, H * 1.4);
+      ctx.restore();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (theme === 'ember') {
+    // the wastes are lit from underneath: heat bleeding up from the floor
+    ctx.globalCompositeOperation = 'lighter';
+    const flick = 0.05 + 0.015 * Math.sin(t * 2.3) + 0.01 * Math.sin(t * 7.1);
+    const up = ctx.createLinearGradient(0, H, 0, H * 0.45);
+    up.addColorStop(0, `rgba(255,96,34,${flick})`);
+    up.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = up;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.38, W / 2, H / 2, Math.hypot(W, H) * 0.62);
+  const edge = theme === 'ember' ? 'rgba(46,8,2,0.36)'
+    : theme === 'abyss' ? 'rgba(2,18,26,0.34)' : 'rgba(9,7,26,0.34)';
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, edge);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
 }
 
 // the portal a world's last boss tears open — patient, but not eternal.
@@ -167,39 +406,66 @@ function drawPortal(game, ctx, t) {
   ctx.restore();
 }
 
-// World III: marine snow — the courts sit under a sea that never stops falling
-function drawMarineSnow(game, ctx, t, W, H, scale) {
+// ── per-world air: dust hangs in the archive, embers climb off the wastes,
+// marine snow sinks through the drowned courts ──
+function drawAtmosphere(game, ctx, t, W, H, scale) {
+  const theme = worldTheme(game);
   const cam = game.camera;
   const hw = W / 2 / scale + 30, hh = H / 2 / scale + 30;
   const spanX = hw * 2, spanY = hh * 2;
+  // world-anchored specks, wrapped into the visible rect
+  const wrapX = (v) => cam.x - hw + (((v - cam.x + hw) % spanX) + spanX) % spanX;
+  const wrapY = (v) => cam.y - hh + (((v - cam.y + hh) % spanY) + spanY) % spanY;
   ctx.save();
-  for (let i = 0; i < 44; i++) {
-    // world-anchored specks, wrapped into the visible rect
-    const seedX = ((i * 733 + 389) % 1021) * 3.1;
-    const seedY = ((i * 967 + 211) % 1013) * 2.7;
-    const sway = Math.sin(t * 0.5 + i * 1.7) * 16;
-    const sink = t * (7 + (i % 5) * 3.5);
-    const x = cam.x - hw + (((seedX + sway - cam.x + hw) % spanX) + spanX) % spanX;
-    const y = cam.y - hh + (((seedY + sink - cam.y + hh) % spanY) + spanY) % spanY;
-    ctx.fillStyle = hexA('#cfe8ee', Math.max(0.08, 0.14 + 0.1 * Math.sin(t * 1.3 + i * 2.6)));
-    ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+  if (theme === 'ember') {
+    for (let i = 0; i < 34; i++) {
+      const seedX = ((i * 733 + 389) % 1021) * 3.1;
+      const seedY = ((i * 967 + 211) % 1013) * 2.7;
+      const sway = Math.sin(t * 0.9 + i * 1.9) * 22;
+      const rise = t * (16 + (i % 5) * 7);
+      const x = wrapX(seedX + sway), y = wrapY(seedY - rise);
+      const flick = 0.5 + 0.5 * Math.sin(t * 6 + i * 2.2);
+      ctx.fillStyle = i % 4 === 0
+        ? hexA('#8a827c', 0.10) // ash rides the same updraft
+        : hexA(i % 3 ? '#ff9a52' : '#ffd9a0', 0.10 + 0.16 * flick);
+      ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.6, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (theme === 'abyss') {
+    // marine snow — the courts sit under a sea that never stops falling
+    for (let i = 0; i < 44; i++) {
+      const seedX = ((i * 733 + 389) % 1021) * 3.1;
+      const seedY = ((i * 967 + 211) % 1013) * 2.7;
+      const sway = Math.sin(t * 0.5 + i * 1.7) * 16;
+      const sink = t * (7 + (i % 5) * 3.5);
+      const x = wrapX(seedX + sway), y = wrapY(seedY + sink);
+      ctx.fillStyle = hexA('#cfe8ee', Math.max(0.08, 0.14 + 0.1 * Math.sin(t * 1.3 + i * 2.6)));
+      ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+  } else {
+    // gold dust adrift between the stacks
+    for (let i = 0; i < 26; i++) {
+      const seedX = ((i * 733 + 389) % 1021) * 3.1;
+      const seedY = ((i * 967 + 211) % 1013) * 2.7;
+      const drift = t * (3 + (i % 3));
+      const bob = Math.sin(t * 0.35 + i * 1.3) * 10 + t * 1.5;
+      const x = wrapX(seedX + drift), y = wrapY(seedY + bob);
+      const tw = 0.5 + 0.5 * Math.sin(t * 1.1 + i * 2.7);
+      ctx.fillStyle = hexA('#d9b45b', 0.05 + 0.09 * tw);
+      ctx.beginPath(); ctx.arc(x, y, 0.8 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
   }
   ctx.restore();
 }
 
 // ── living features per chunk ──
 function drawChunkLife(game, ctx, ch, t) {
-  // pillars
+  const theme = ch.biome.theme;
   for (const pil of ch.pillars) {
-    ctx.fillStyle = '#0a0c1c';
-    ctx.beginPath(); ctx.ellipse(pil.x, pil.y + 8, pil.r * 1.1, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-    const gr = ctx.createLinearGradient(pil.x - pil.r, pil.y, pil.x + pil.r, pil.y);
-    gr.addColorStop(0, '#1c2038'); gr.addColorStop(0.5, '#2e3354'); gr.addColorStop(1, '#141830');
-    ctx.fillStyle = gr;
-    ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(217,180,91,0.3)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.stroke();
+    if (theme === 'ember') drawShardCluster(ctx, ch.biome, pil, t);
+    else if (theme === 'abyss') drawBrokenColumn(ctx, ch.biome, pil, t);
+    else drawStonePillar(ctx, pil);
   }
+  for (const p of ch.pools) drawPoolLife(ctx, ch.biome, p, t);
   // shrines
   if (ch.shrine) {
     const sh = ch.shrine;
@@ -216,18 +482,11 @@ function drawChunkLife(game, ctx, ch, t) {
     ctx.restore();
     if (ready) glow(ctx, sh.x, sh.y, 46, 'rgba(143,216,255,0.16)');
   }
-  // candles
+  // light sources: candles, fumaroles, drowned lanterns
   for (const cd of ch.candles) {
-    const fl = 0.75 + Math.sin(t * 9 + cd.x) * 0.12 + Math.sin(t * 23 + cd.y) * 0.06;
-    glow(ctx, cd.x, cd.y - 12, 70 * fl, 'rgba(255,180,80,0.10)');
-    ctx.fillStyle = '#d9cba8';
-    for (let i = 0; i < 3; i++) {
-      const ox = (i - 1) * 10, oh = 10 + ((cd.x + i * 7) % 8);
-      ctx.fillRect(cd.x + ox - 2, cd.y - oh, 4, oh);
-      ctx.fillStyle = `rgba(255,${170 + i * 20},60,${fl})`;
-      ctx.beginPath(); ctx.ellipse(cd.x + ox, cd.y - oh - 5, 2.4, 5 * fl, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#d9cba8';
-    }
+    if (theme === 'ember') drawEmberVent(ctx, ch.biome, cd, t);
+    else if (theme === 'abyss') drawDrownedLantern(ctx, ch.biome, cd, t);
+    else drawCandles(ctx, cd, t);
   }
   // enemy camp: cursed totem + banner ring
   if (ch.camp && !ch.camp.cleared) {
@@ -279,26 +538,43 @@ function drawChunkLife(game, ctx, ch, t) {
     ctx.setLineDash([]);
     ctx.fillStyle = hexA('#8fd8ff', 0.03);
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
-    // hearth fire
-    const fl = 0.8 + Math.sin(t * 8 + s.x) * 0.14 + Math.sin(t * 21) * 0.06;
-    glow(ctx, s.x, s.y - 8, 90 * fl, 'rgba(255,180,80,0.16)');
-    ctx.fillStyle = '#2c2016';
-    for (let i = 0; i < 4; i++) { // log circle
-      ctx.save(); ctx.translate(s.x, s.y); ctx.rotate((i / 4) * Math.PI + 0.4);
-      ctx.fillRect(-16, -3, 32, 6);
-      ctx.restore();
+    // hearth fire: wood in the archive, coals in the wastes, ghost-flame
+    // that burns without air in the courts
+    const st = SANCTUARY_STYLE[theme] || SANCTUARY_STYLE.arcane;
+    const fl = 0.8 + Math.sin(t * (theme === 'abyss' ? 3 : 8) + s.x) * 0.14 + Math.sin(t * 21) * 0.06;
+    glow(ctx, s.x, s.y - 8, 90 * fl, st.glow);
+    if (theme === 'ember') { // ring of scorched stones
+      ctx.fillStyle = '#241016';
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + 0.5;
+        ctx.beginPath(); ctx.arc(s.x + Math.cos(a) * 17, s.y + Math.sin(a) * 12, 5, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (theme === 'abyss') { // bleached driftwood
+      ctx.fillStyle = '#57606e';
+      for (let i = 0; i < 3; i++) {
+        ctx.save(); ctx.translate(s.x, s.y); ctx.rotate((i / 3) * Math.PI + 0.7);
+        ctx.fillRect(-15, -2.5, 30, 5);
+        ctx.restore();
+      }
+    } else { // log circle
+      ctx.fillStyle = '#2c2016';
+      for (let i = 0; i < 4; i++) {
+        ctx.save(); ctx.translate(s.x, s.y); ctx.rotate((i / 4) * Math.PI + 0.4);
+        ctx.fillRect(-16, -3, 32, 6);
+        ctx.restore();
+      }
     }
-    ctx.fillStyle = `rgba(255,${150 + fl * 60 | 0},60,${0.85 * fl})`;
+    ctx.fillStyle = `rgba(${st.flame},${0.85 * fl})`;
     ctx.beginPath();
     ctx.moveTo(s.x - 8, s.y);
     ctx.quadraticCurveTo(s.x - 6, s.y - 18 * fl, s.x, s.y - 26 * fl);
     ctx.quadraticCurveTo(s.x + 6, s.y - 18 * fl, s.x + 8, s.y);
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = `rgba(255,240,180,${0.9 * fl})`;
+    ctx.fillStyle = `rgba(${st.core},${0.9 * fl})`;
     ctx.beginPath(); ctx.ellipse(s.x, s.y - 6, 3.5, 8 * fl, 0, 0, Math.PI * 2); ctx.fill();
     // card table beside the fire
-    ctx.fillStyle = '#241d16'; ctx.fillRect(s.x + 28, s.y - 12, 34, 22);
-    ctx.strokeStyle = 'rgba(217,180,91,0.5)'; ctx.lineWidth = 1.2; ctx.strokeRect(s.x + 28, s.y - 12, 34, 22);
+    ctx.fillStyle = st.table; ctx.fillRect(s.x + 28, s.y - 12, 34, 22);
+    ctx.strokeStyle = st.trim; ctx.lineWidth = 1.2; ctx.strokeRect(s.x + 28, s.y - 12, 34, 22);
     for (let i = 0; i < 3; i++) {
       ctx.save(); ctx.translate(s.x + 36 + i * 9, s.y - 2); ctx.rotate(-0.2 + i * 0.2);
       ctx.fillStyle = 'rgba(232,220,192,0.75)'; ctx.fillRect(-3.5, -5.5, 7, 11);
@@ -322,6 +598,193 @@ function drawChunkLife(game, ctx, ch, t) {
     ctx.beginPath(); ctx.arc(0, -2, 3, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
+}
+
+// how each world dresses its safe rooms: hearth colors and table stone
+const SANCTUARY_STYLE = {
+  arcane: { flame: '255,170,70', core: '255,240,180', glow: 'rgba(255,180,80,0.16)', table: '#241d16', trim: 'rgba(217,180,91,0.5)' },
+  ember: { flame: '255,120,50', core: '255,250,225', glow: 'rgba(255,140,60,0.18)', table: '#150d1c', trim: 'rgba(255,138,74,0.55)' },
+  abyss: { flame: '110,230,200', core: '215,255,245', glow: 'rgba(110,230,200,0.14)', table: '#2e3a4c', trim: 'rgba(126,232,208,0.5)' },
+};
+
+// World I pillar: a worked stone drum, gold-banded
+function drawStonePillar(ctx, pil) {
+  ctx.fillStyle = '#0a0c1c';
+  ctx.beginPath(); ctx.ellipse(pil.x, pil.y + 8, pil.r * 1.1, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  const gr = ctx.createLinearGradient(pil.x - pil.r, pil.y, pil.x + pil.r, pil.y);
+  gr.addColorStop(0, '#1c2038'); gr.addColorStop(0.5, '#2e3354'); gr.addColorStop(1, '#141830');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(217,180,91,0.3)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.stroke();
+}
+
+// World II pillar: a cluster of volcanic glass shards, lit from below
+function drawShardCluster(ctx, b, pil, t) {
+  ctx.fillStyle = 'rgba(4,1,1,0.8)';
+  ctx.beginPath(); ctx.ellipse(pil.x, pil.y + 6, pil.r * 1.2, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  glow(ctx, pil.x, pil.y + 4, pil.r * 1.5, hexA(b.accent, 0.07 + Math.sin(t * 2 + pil.x) * 0.02));
+  const base = tileHash(pil.x | 0, pil.y | 0, 7) * Math.PI * 2;
+  for (let i = 0; i < 3; i++) {
+    const a = base + i * 2.1;
+    const w = pil.r * (0.45 + 0.2 * tileHash(pil.x | 0, i, 8));
+    const h = pil.r * (1.1 + 0.7 * tileHash(i, pil.y | 0, 9));
+    const ox = Math.cos(a) * pil.r * 0.4, oy = Math.sin(a) * pil.r * 0.25;
+    const gr = ctx.createLinearGradient(pil.x + ox - w, pil.y, pil.x + ox + w, pil.y);
+    gr.addColorStop(0, '#241016'); gr.addColorStop(0.55, '#3c1a20'); gr.addColorStop(1, '#140a0e');
+    ctx.fillStyle = gr;
+    ctx.beginPath();
+    ctx.moveTo(pil.x + ox - w, pil.y + oy + 4);
+    ctx.lineTo(pil.x + ox + w * 0.9, pil.y + oy + 6);
+    ctx.lineTo(pil.x + ox + w * 0.15, pil.y + oy - h);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA(b.accent, 0.3); ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(pil.x + ox + w * 0.15, pil.y + oy - h);
+    ctx.lineTo(pil.x + ox - w * 0.2, pil.y + oy + 2);
+    ctx.stroke();
+  }
+}
+
+// World III pillar: a fluted marble column snapped at the waist, furred with
+// verdigris; kelp holds on where the current is gentle
+function drawBrokenColumn(ctx, b, pil, t) {
+  ctx.fillStyle = 'rgba(2,8,10,0.7)';
+  ctx.beginPath(); ctx.ellipse(pil.x, pil.y + 8, pil.r * 1.15, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  const gr = ctx.createLinearGradient(pil.x - pil.r, pil.y, pil.x + pil.r, pil.y);
+  gr.addColorStop(0, '#3c4456'); gr.addColorStop(0.5, '#5c667c'); gr.addColorStop(1, '#2c3444');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.fill();
+  // the snapped core sits lower than the rim
+  ctx.fillStyle = 'rgba(16,20,30,0.55)';
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r * 0.62, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(226,232,242,0.28)'; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 10; i++) { // fluting
+    const a = (i / 10) * Math.PI * 2 + 0.3;
+    ctx.beginPath();
+    ctx.moveTo(pil.x + Math.cos(a) * pil.r * 0.68, pil.y + Math.sin(a) * pil.r * 0.68);
+    ctx.lineTo(pil.x + Math.cos(a) * pil.r * 0.94, pil.y + Math.sin(a) * pil.r * 0.94);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(226,232,242,0.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r, 0, Math.PI * 2); ctx.stroke();
+  const va = tileHash(pil.x | 0, pil.y | 0, 4) * Math.PI * 2;
+  ctx.strokeStyle = hexA('#5fd8a0', 0.3); ctx.lineWidth = 3; // verdigris
+  ctx.beginPath(); ctx.arc(pil.x, pil.y, pil.r * 0.97, va, va + 1.4); ctx.stroke();
+  for (let i = 0; i < 2; i++) { // kelp sways in the standing current
+    const a = va + 2 + i * 1.8;
+    const kx = pil.x + Math.cos(a) * (pil.r + 3), ky = pil.y + Math.sin(a) * (pil.r + 3);
+    const sway = Math.sin(t * 0.9 + pil.x * 0.05 + i * 2) * 5;
+    ctx.strokeStyle = hexA(b.accent, 0.4); ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(kx, ky);
+    ctx.quadraticCurveTo(kx + sway, ky - 12, kx + sway * 1.8, ky - 24);
+    ctx.stroke();
+  }
+}
+
+// World I light: a trio of wax candles
+function drawCandles(ctx, cd, t) {
+  const fl = 0.75 + Math.sin(t * 9 + cd.x) * 0.12 + Math.sin(t * 23 + cd.y) * 0.06;
+  glow(ctx, cd.x, cd.y - 12, 70 * fl, 'rgba(255,180,80,0.10)');
+  ctx.fillStyle = '#d9cba8';
+  for (let i = 0; i < 3; i++) {
+    const ox = (i - 1) * 10, oh = 10 + ((cd.x + i * 7) % 8);
+    ctx.fillRect(cd.x + ox - 2, cd.y - oh, 4, oh);
+    ctx.fillStyle = `rgba(255,${170 + i * 20},60,${fl})`;
+    ctx.beginPath(); ctx.ellipse(cd.x + ox, cd.y - oh - 5, 2.4, 5 * fl, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#d9cba8';
+  }
+}
+
+// World II light: a fumarole — a split in the rock that breathes fire
+function drawEmberVent(ctx, b, cd, t) {
+  const breath = 0.65 + Math.sin(t * 2.2 + cd.x * 0.03) * 0.25 + Math.sin(t * 7 + cd.y) * 0.1;
+  glow(ctx, cd.x, cd.y, 64 * breath, hexA(b.accent, 0.12));
+  ctx.fillStyle = '#180b08';
+  ctx.beginPath(); ctx.ellipse(cd.x, cd.y, 16, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(cd.x, cd.y, 16, 10, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = hexA('#ffd27a', 0.35 + breath * 0.45); ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(cd.x - 10, cd.y + 3);
+  ctx.lineTo(cd.x - 3, cd.y - 2);
+  ctx.lineTo(cd.x + 4, cd.y + 2);
+  ctx.lineTo(cd.x + 10, cd.y - 3);
+  ctx.stroke();
+  for (let i = 0; i < 3; i++) { // sparks ride the heat up
+    const cyc = cycle(t * (0.5 + (i % 3) * 0.2) + i * 1.1 + cd.x * 0.01, 1.5);
+    ctx.fillStyle = hexA(i === 1 ? '#fff1c9' : b.accent, Math.max(0, 0.8 - cyc * 0.6));
+    ctx.beginPath();
+    ctx.arc(cd.x + Math.sin(cyc * 9 + i) * 5, cd.y - 4 - cyc * 26, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// World III light: a court lantern still lit under the sea, gone cold
+function drawDrownedLantern(ctx, b, cd, t) {
+  const pulse = 0.7 + Math.sin(t * 1.3 + cd.x * 0.02) * 0.2;
+  const lean = (tileHash(cd.x | 0, cd.y | 0, 3) - 0.5) * 0.5;
+  ctx.save();
+  ctx.translate(cd.x, cd.y); ctx.rotate(lean);
+  glow(ctx, 0, -26, 58 * pulse, hexA(b.accent, 0.11));
+  ctx.fillStyle = '#1c2c30'; // the post, furred with algae
+  ctx.fillRect(-2.5, -26, 5, 28);
+  ctx.strokeStyle = hexA('#5fd8a0', 0.35); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(-2, 0); ctx.quadraticCurveTo(-5, -8, -2.5, -15); ctx.stroke();
+  ctx.fillStyle = '#243a40'; // glass head
+  ctx.fillRect(-6.5, -38, 13, 13);
+  ctx.fillStyle = hexA(b.accent, 0.55 * pulse + 0.2);
+  ctx.beginPath(); ctx.arc(0, -31.5, 3.6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(220,240,236,0.3)'; ctx.lineWidth = 1;
+  ctx.strokeRect(-6.5, -38, 13, 13);
+  ctx.restore();
+  for (let i = 0; i < 2; i++) { // bubbles slip from the seams
+    const cyc = cycle(t * 0.4 + i * 0.9 + cd.y * 0.01, 1.8);
+    ctx.strokeStyle = hexA('#d8f2ee', Math.max(0, 0.4 - cyc * 0.22));
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cd.x + Math.sin(cyc * 5 + i * 3) * 3, cd.y - 40 - cyc * 22, 1 + cyc, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// pools breathe: lava pulses, seawater ripples, ink turns over in its sleep
+function drawPoolLife(ctx, b, p, t) {
+  const seed = (p.x * 13 + p.y * 7) % 100;
+  ctx.save();
+  if (b.theme === 'ember') {
+    ctx.globalCompositeOperation = 'lighter';
+    const pulse = 0.5 + Math.sin(t * 1.8 + seed) * 0.3;
+    glow(ctx, p.x, p.y, p.r * 1.35, hexA(b.accent, 0.05 + 0.05 * pulse));
+    for (let i = 0; i < 3; i++) {
+      const cyc = cycle(t * (0.35 + (i % 2) * 0.2) + i * 1.4 + seed, 1.8);
+      const a = seed + i * 2.3;
+      ctx.fillStyle = hexA(i === 1 ? '#fff1c9' : b.accent, Math.max(0, 0.7 - cyc * 0.45));
+      ctx.beginPath();
+      ctx.arc(p.x + Math.cos(a) * p.r * 0.5, p.y + Math.sin(a) * p.r * 0.4 - cyc * 20, 1.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (b.theme === 'abyss') {
+    for (let i = 0; i < 2; i++) { // ripples spread and die
+      const rip = cycle(t * 0.3 + i * 0.5 + seed * 0.01, 1);
+      ctx.strokeStyle = hexA('#bfe8e2', 0.14 * (1 - rip));
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r * rip, p.r * rip * 0.85, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.fillStyle = hexA('#cfeee8', 0.05 + Math.sin(t * 0.9 + seed) * 0.02);
+    ctx.beginPath();
+    ctx.ellipse(p.x + Math.cos(t * 0.4 + seed) * p.r * 0.3, p.y + Math.sin(t * 0.3 + seed) * p.r * 0.2,
+      p.r * 0.42, p.r * 0.2, t * 0.2 + seed, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = hexA(b.accent, 0.05 + Math.sin(t * 0.8 + seed) * 0.03);
+    ctx.beginPath();
+    ctx.ellipse(p.x + Math.cos(t * 0.5 + seed) * p.r * 0.25, p.y + Math.sin(t * 0.4 + seed) * p.r * 0.18,
+      p.r * 0.4, p.r * 0.22, -t * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ── bounded regions: duel zones & boss gates ──
@@ -436,12 +899,12 @@ function drawHazard(ctx, hz, t) {
     ctx.strokeStyle = hexA(hz.color, 0.45); ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(hz.x, hz.y, hz.r, hz.r * 0.85, seed, 0, Math.PI * 2); ctx.stroke();
     // slow ripples spread from where it last swallowed something
-    const rip = (t * 0.55 + seed) % 1;
+    const rip = cycle(t * 0.55 + seed, 1);
     ctx.strokeStyle = hexA(hz.color, 0.35 * (1 - rip)); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(hz.x, hz.y, hz.r * rip, hz.r * rip * 0.85, seed, 0, Math.PI * 2); ctx.stroke();
     // bubbles rise and pop at the surface
     for (let i = 0; i < 4; i++) {
-      const cyc = (t * (0.5 + (i % 3) * 0.2) + i * 1.3 + seed) % 1.4;
+      const cyc = cycle(t * (0.5 + (i % 3) * 0.2) + i * 1.3 + seed, 1.4);
       const a = seed * 3 + i * 2.1;
       ctx.strokeStyle = hexA('#d8f2ee', Math.max(0, 0.55 - cyc * 0.4));
       ctx.lineWidth = 1;
@@ -470,11 +933,11 @@ function drawHazard(ctx, hz, t) {
     }
     // embers lift off the slag
     for (let i = 0; i < 4; i++) {
-      const cycle = (t * (0.6 + (i % 3) * 0.25) + i * 1.7 + seed) % 1.6;
+      const cyc = cycle(t * (0.6 + (i % 3) * 0.25) + i * 1.7 + seed, 1.6);
       const a = seed * 2 + i * 2.4;
-      ctx.fillStyle = hexA(i % 2 ? '#fff1c9' : hz.color, Math.max(0, 0.7 - cycle * 0.5));
+      ctx.fillStyle = hexA(i % 2 ? '#fff1c9' : hz.color, Math.max(0, 0.7 - cyc * 0.5));
       ctx.beginPath();
-      ctx.arc(hz.x + Math.cos(a) * hz.r * 0.5, hz.y + Math.sin(a) * hz.r * 0.5 - cycle * 16, 1.6, 0, Math.PI * 2);
+      ctx.arc(hz.x + Math.cos(a) * hz.r * 0.5, hz.y + Math.sin(a) * hz.r * 0.5 - cyc * 16, 1.6, 0, Math.PI * 2);
       ctx.fill();
     }
   }

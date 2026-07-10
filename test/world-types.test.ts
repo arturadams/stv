@@ -122,6 +122,7 @@ const warrior = {
 const biome = {
   id: 'archive',
   name: 'The Sunken Archive',
+  theme: 'arcane',
   floor: [17, 20, 42],
   tileVar: [14, 13, 16],
   grout: 'rgba(5,6,15,0.85)',

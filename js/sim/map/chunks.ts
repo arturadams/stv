@@ -1,5 +1,5 @@
 import { BIOMES, BIOME_IDS, WORLDS } from '../../data/index.js';
-import type { BiomeDef, Chunk, WorldDef } from '../../data/types.js';
+import type { BiomeDef, Chunk, WorldDef, WorldTheme } from '../../data/types.js';
 import { hash2, makeRng } from '../../core/rng.js';
 import type { GameState } from '../types.js';
 
@@ -19,6 +19,26 @@ export interface RegionObject {
 export function worldDef(game: WorldState): WorldDef {
   return WORLDS[Math.min(game.world || 1, WORLDS.length) - 1];
 }
+
+export function worldTheme(game: WorldState): WorldTheme {
+  return biomeDefs[worldDef(game).biomes[0]].theme;
+}
+
+// Prop density and scale per visual theme: the ember wastes crowd the floor
+// with shard clusters and narrow lava fissures, the drowned courts spread out
+// around broad flood pools and fallen columns.
+interface ThemeGen {
+  pillarSkip: number;
+  pillarMax: number;
+  pillarR: readonly [base: number, spread: number];
+  poolChance: number;
+  poolR: readonly [base: number, spread: number];
+}
+const THEME_GEN: Record<WorldTheme, ThemeGen> = {
+  arcane: { pillarSkip: 0.55, pillarMax: 2, pillarR: [26, 20], poolChance: 0.22, poolR: [70, 50] },
+  ember: { pillarSkip: 0.4, pillarMax: 3, pillarR: [22, 16], poolChance: 0.3, poolR: [52, 38] },
+  abyss: { pillarSkip: 0.6, pillarMax: 2, pillarR: [30, 22], poolChance: 0.3, poolR: [90, 70] },
+};
 
 export function biomeOf(
   cx: number,
@@ -60,14 +80,15 @@ export function getChunk(game: ChunkState, cx: number, cy: number): Chunk {
     deco: [],
   };
 
-  const pillarCount = rng.chance(0.55) ? 0 : 1 + rng.int(2);
+  const gen = THEME_GEN[chunk.biome.theme];
+  const pillarCount = rng.chance(gen.pillarSkip) ? 0 : 1 + rng.int(gen.pillarMax);
   for (let i = 0; i < pillarCount; i++) {
     const point = at(70);
-    chunk.pillars.push({ x: point.x, y: point.y, r: 26 + rng.float() * 20 });
+    chunk.pillars.push({ x: point.x, y: point.y, r: gen.pillarR[0] + rng.float() * gen.pillarR[1] });
   }
-  if (rng.chance(0.22)) {
+  if (rng.chance(gen.poolChance)) {
     const point = at(120);
-    chunk.pools.push({ x: point.x, y: point.y, r: 70 + rng.float() * 50 });
+    chunk.pools.push({ x: point.x, y: point.y, r: gen.poolR[0] + rng.float() * gen.poolR[1] });
   }
   const candleCount = rng.int(3);
   for (let i = 0; i < candleCount; i++) chunk.candles.push(at(50));

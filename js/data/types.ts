@@ -659,9 +659,15 @@ export interface ClassDef {
 
 export type Rgb = readonly [red: number, green: number, blue: number];
 
+// Each world paints with a different brush: arcane = candle-lit archive stone,
+// ember = cracked basalt and lava light, abyss = drowned marble and cold glow.
+// The theme drives prop generation (map/chunks.ts) and rendering (render.js).
+export type WorldTheme = 'arcane' | 'ember' | 'abyss';
+
 export interface BiomeDef {
   id: string;
   name: string;
+  theme: WorldTheme;
   floor: Rgb;
   tileVar: Rgb;
   grout: string;

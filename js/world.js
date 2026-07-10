@@ -16,6 +16,6 @@ export {
 } from './sim/run/sanctuary.js';
 export { metaUnlockedWorld, resetMetaProgress } from './sim/run/meta.js';
 export {
-  CHUNK, biomeOf, getChunk, worldDef,
+  CHUNK, biomeOf, getChunk, worldDef, worldTheme,
 } from './sim/map/chunks.js';
 export { floater } from './sim/fx.js';
