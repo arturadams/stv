@@ -432,12 +432,19 @@ export type BehaviorId =
   | 'geyser'
   | 'stoker'
   | 'warden'
+  | 'siren'
+  | 'urchin'
+  | 'undertow'
+  | 'mender'
   | 'boss'
   | 'boss_leviathan'
   | 'boss_king'
   | 'boss_sovereign'
   | 'boss_colossus'
   | 'boss_phoenix'
+  | 'boss_queen'
+  | 'boss_regent'
+  | 'boss_reliquary'
   | 'rival';
 
 export type ClassId = 'mage' | 'warrior' | 'rogue';
@@ -521,6 +528,19 @@ export interface EnemyDef {
   summonId?: string;
   deathBurst?: ExplosionSpec;
   deathSpawn?: { id: string; count: number };
+  // exploders that leave the floor poisoned where they pop (brine motes)
+  boomHazard?: { r: number; dmg: number; dur: number };
+  // the tide: currents that drag the player (sirens, undertow maws)
+  pullEvery?: number;
+  pullR?: number;
+  pullForce?: number;
+  // choristers knit the court's wounds shut
+  healEvery?: number;
+  healR?: number;
+  healAmt?: number;
+  // reef urchins loose their spines in all directions at once
+  volleyEvery?: number;
+  volleyCount?: number;
   chargeRange?: number;
   chargeTel?: number;
   chargeSpeed?: number;
@@ -719,7 +739,6 @@ export interface Landmark extends Point {
   zoneR: number;
   cleared: boolean;
   engaged: boolean;
-  portal?: boolean;
 }
 
 export interface Treasure extends Point {

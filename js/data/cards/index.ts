@@ -4,6 +4,7 @@ import { WARRIOR_CARDS } from './warrior.js';
 import { ROGUE_CARDS } from './rogue.js';
 import { COLORLESS_CARDS } from './colorless.js';
 import { WORLD2_CARDS } from './world2.js';
+import { WORLD3_CARDS } from './world3.js';
 
 const cards: CardDef[] = [
   ...MAGE_CARDS,
@@ -11,6 +12,7 @@ const cards: CardDef[] = [
   ...ROGUE_CARDS,
   ...COLORLESS_CARDS,
   ...WORLD2_CARDS,
+  ...WORLD3_CARDS,
 ];
 
 export const CARDS: Record<string, CardDef> =

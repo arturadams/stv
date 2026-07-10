@@ -17,6 +17,10 @@ import './charger.js';
 import './geyser.js';
 import './stoker.js';
 import './warden.js';
+import './siren.js';
+import './urchin.js';
+import './undertow.js';
+import './mender.js';
 import './boss.js';
 import './leviathan.js';
 import './king.js';
@@ -24,6 +28,9 @@ import './sovereign.js';
 import './colossus.js';
 import './phoenix.js';
 import './rival.js';
+import './queen.js';
+import './regent.js';
+import './reliquary.js';
 
 export function touchAttack(game: GameState, e: EnemyState, dist: number, dt: number): void {
   const p = game.player;

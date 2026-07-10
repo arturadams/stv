@@ -43,7 +43,8 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false,
     camera: { x: 0, y: 0, shake: 0 },
     chunks: new Map(),
-    portalOpen: false,
+    portal: null,
+    portalRespawnT: 0,
     zoneRegion: null,
     activeBoss: null,
     // matchmaking / rival encounters
@@ -52,7 +53,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     ally: null, // partied rival
     encounterPause: false,
     banner: null, pendingReward: null, rewardQueue: [],
-    stolen: null, dangerT: 0, kills: 0, runTime: 0, campsCleared: 0, bossesSlain: 0, duelsWon: 0,
+    stolen: null, dangerT: 0, kills: 0, runTime: 0, campsCleared: 0, bossesSlain: 0, worldBossesSlain: 0, duelsWon: 0,
     spawnT: 1.5,
     gold: 30, sanctuary: null,
     deckIds: STARTING_DECKS.mage.map((id) => ({ id, lvl: 0 })),

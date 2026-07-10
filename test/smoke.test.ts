@@ -74,7 +74,9 @@ describe('forced headless paths', () => {
 
     expect(game.bossesSlain).toBe(1);
     expect(bossesSlainAtEvent).toBe(1);
-    expect(landmark).toMatchObject({ cleared: true, portal: true });
+    expect(landmark).toMatchObject({ cleared: true });
+    // one gate down, two to go — the portal waits for the world's last boss
+    expect(game.portal).toBeNull();
     const reward = game.pendingReward;
     if (!reward) throw new TypeError('expected relic reward');
     expect(reward.type).toBe('relic');

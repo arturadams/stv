@@ -19,5 +19,15 @@ export const BIOMES = {
     grout: 'rgba(10,9,2,0.85)', accent: '#ffe66d', deco: '☣♃❋♒', hazard: 'rgba(36,32,6,0.92)', hazardEdge: 'rgba(255,230,109,0.3)' },
   pyre: { id: 'pyre', name: 'The Endless Pyre', floor: [30, 10, 14], tileVar: [16, 6, 8],
     grout: 'rgba(9,3,4,0.85)', accent: '#ff5d6a', deco: '♰☠⚸♅', hazard: 'rgba(38,8,10,0.92)', hazardEdge: 'rgba(255,93,106,0.35)' },
+  // World III — the Drowned Courts: pale marble under cold water, verdigris
+  // and pearl. Everything World II scorched black, this world bleaches.
+  ballroom: { id: 'ballroom', name: 'The Flooded Ballroom', floor: [18, 32, 40], tileVar: [12, 14, 14],
+    grout: 'rgba(4,12,16,0.85)', accent: '#7ee8d0', deco: '♛♫⚜✧', hazard: 'rgba(6,24,26,0.92)', hazardEdge: 'rgba(126,232,208,0.35)' },
+  gardens: { id: 'gardens', name: 'The Kelp Gardens', floor: [9, 30, 25], tileVar: [6, 14, 12],
+    grout: 'rgba(2,10,8,0.85)', accent: '#5fd8a0', deco: '❧☙♆❀', hazard: 'rgba(4,22,16,0.92)', hazardEdge: 'rgba(95,216,160,0.35)' },
+  mausoleum: { id: 'mausoleum', name: 'The Pearl Mausoleum', floor: [28, 28, 38], tileVar: [12, 12, 15],
+    grout: 'rgba(8,8,14,0.85)', accent: '#e6e0f2', deco: '⚱♰☽✧', hazard: 'rgba(16,16,28,0.92)', hazardEdge: 'rgba(230,224,242,0.3)' },
+  trench: { id: 'trench', name: 'The Abyssal Trench', floor: [5, 12, 24], tileVar: [4, 8, 14],
+    grout: 'rgba(1,4,10,0.9)', accent: '#4a90d9', deco: '♆⚓✵☠', hazard: 'rgba(3,10,22,0.94)', hazardEdge: 'rgba(74,144,217,0.35)' },
 } satisfies Record<string, BiomeDef>;
 export const BIOME_IDS = ['archive', 'ashen', 'verdant', 'umbral'];

@@ -66,4 +66,41 @@ export const ENEMIES = {
     dmg: 24, behavior: 'boss_colossus', boss: true, color: '#241108', glow: '#ff7a2f', shards: 18 },
   phoenix: { id: 'phoenix', name: 'The Pyre Matriarch', role: 'boss', hp: 1300, speed: 150, radius: 30,
     dmg: 18, behavior: 'boss_phoenix', boss: true, color: '#3a1410', glow: '#ffb347', shards: 18 },
+
+  // ═══ World III: The Drowned Courts — an aristocracy that would not stop
+  // dancing when the sea came in. The tide is the theme made mechanical:
+  // currents that drag you where you did not choose to stand, brine that
+  // lingers on the marble, and a court that heals its own. ═══
+  pallid: { id: 'pallid', name: 'Pallid Courtier', role: 'swarm', hp: 26, speed: 138, radius: 13,
+    dmg: 10, behavior: 'chase', color: '#1e3440', glow: '#7ee8d0', shards: 1 },
+  mote: { id: 'mote', name: 'Brine Mote', role: 'exploder', hp: 18, speed: 112, radius: 14,
+    dmg: 20, behavior: 'exploder', fuse: 0.95, boomR: 92, boomHazard: { r: 62, dmg: 5, dur: 4.5 },
+    color: '#14303a', glow: '#8fd8ff', shards: 1 },
+  siren: { id: 'siren', name: 'Court Siren', role: 'controller', hp: 40, speed: 88, radius: 15,
+    dmg: 10, behavior: 'siren', pullEvery: 5.5, pullR: 320, pullForce: 210,
+    color: '#2a2440', glow: '#c9a0ff', shards: 2 },
+  lancer: { id: 'lancer', name: 'Tide Lancer', role: 'skirmisher', hp: 58, speed: 62, radius: 19,
+    dmg: 13, behavior: 'lunge', lungeRange: 210, lungeTel: 0.6, lungeSpeed: 500, lungeChain: 2,
+    color: '#1c3a44', glow: '#5fd8c8', shards: 2 },
+  urchin: { id: 'urchin', name: 'Reef Urchin', role: 'turret', hp: 62, speed: 0, radius: 16,
+    dmg: 9, behavior: 'urchin', range: 520, volleyEvery: 3.4, volleyCount: 12, projSpeed: 240,
+    color: '#20283a', glow: '#8fb8ff', shards: 2 },
+  maw: { id: 'maw', name: 'Undertow Maw', role: 'vortex', hp: 74, speed: 0, radius: 18,
+    dmg: 12, behavior: 'undertow', range: 560, pullEvery: 6, pullR: 260, pullForce: 200,
+    color: '#0e2028', glow: '#4a90d9', shards: 3 },
+  chorister: { id: 'chorister', name: 'Grief Chorister', role: 'support', hp: 46, speed: 104, radius: 14,
+    dmg: 7, behavior: 'mender', healEvery: 4.5, healR: 250, healAmt: 9,
+    color: '#2e3444', glow: '#e6e0f2', shards: 3 },
+  seneschal: { id: 'seneschal', name: 'The Tidebound Seneschal', role: 'elite', hp: 420, speed: 56, radius: 30,
+    dmg: 20, behavior: 'warden', waveEvery: 7, waveR: 340, waveTel: 0.95, waveDmg: 22,
+    summonEvery: 9, summonId: 'pallid',
+    elite: true, color: '#182c38', glow: '#7ee8d0', shards: 10 },
+
+  // ── World III bosses — three regents of the drowned court ──
+  sunless_queen: { id: 'sunless_queen', name: 'The Sunless Queen', role: 'boss', hp: 1900, speed: 48, radius: 34,
+    dmg: 20, behavior: 'boss_queen', boss: true, minion: 'pallid', color: '#141e30', glow: '#e6e0f2', shards: 22 },
+  regent: { id: 'regent', name: 'The Undertow Regent', role: 'boss', hp: 2100, speed: 40, radius: 40,
+    dmg: 24, behavior: 'boss_regent', boss: true, color: '#0c2230', glow: '#4a90d9', shards: 22 },
+  reliquary: { id: 'reliquary', name: 'The Weeping Reliquary', role: 'boss', hp: 1600, speed: 0, radius: 38,
+    dmg: 18, behavior: 'boss_reliquary', boss: true, minion: 'mote', color: '#242a3a', glow: '#c9a0ff', shards: 22 },
 } satisfies Record<string, EnemyDef>;

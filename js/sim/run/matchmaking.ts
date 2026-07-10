@@ -4,6 +4,7 @@ import { sfx } from '../../audio.js';
 import { threatOf } from '../combat.js';
 import { spawnEnemy, spawnPointNear } from '../entities/spawn.js';
 import { worldDef } from '../map/chunks.js';
+import { dismissAmbient } from '../map/features.js';
 import type { GameState } from '../types.js';
 import { makeCardReward, offerReward } from './rewards.js';
 
@@ -126,8 +127,8 @@ function startDuel(game: GameState): void {
   const cx = (p.x + r.x) / 2;
   const cy = (p.y + r.y) / 2;
   game.zoneRegion = { x: cx, y: cy, r: 500, kind: 'duel' };
-  // the duel zone empties of lesser threats
-  for (const e of game.enemies) if (!e.def.boss) e.dead = true;
+  // the duel circle empties of lesser threats
+  dismissAmbient(game);
   game.enemies = game.enemies.filter((e) => !e.dead);
   const threat = threatOf(game);
   const rivalDef: EnemyDef = {
@@ -144,6 +145,7 @@ function startDuel(game: GameState): void {
 export function duelVictory(game: GameState, e: EnemyState): void {
   game.duelsWon++;
   game.zoneRegion = null;
+  game.spawnT = Math.max(game.spawnT, 8); // a breath before the world returns
   game.mm = { state: 'idle', nextT: game.rng.range(75, 120), searchT: 0, timeout: 9 };
   game.player.hp = Math.min(game.player.maxHp, game.player.hp + 25);
   game.gold += 30;

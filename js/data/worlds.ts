@@ -1,8 +1,8 @@
 import type { WorldDef } from './types.js';
 import { BIOME_IDS } from './biomes.js';
 
-// ── Worlds ── five realms of increasing cruelty. World 1–2 have full content;
-// 3–5 are declared (names, scaling) and reuse World 2 sets until authored.
+// ── Worlds ── five realms of increasing cruelty. World 1–3 have full content;
+// 4–5 are declared (names, scaling) and reuse World 3 sets until authored.
 // Each world fields three original bosses — its gates cycle through them.
 const W2_TIERS = [
   { id: 'imp', minThreat: 0, w: 9 }, { id: 'mortar', minThreat: 0, w: 4 },
@@ -11,7 +11,14 @@ const W2_TIERS = [
   { id: 'bellows', minThreat: 3.8, w: 2 }, { id: 'kiln_warden', minThreat: 5.5, w: 1 },
 ];
 const W2_BIOMES = ['cinder', 'obsidian', 'sulfur', 'pyre'];
-const W2_BOSSES = ['sovereign', 'colossus', 'phoenix'];
+const W3_TIERS = [
+  { id: 'pallid', minThreat: 0, w: 9 }, { id: 'mote', minThreat: 0, w: 4 },
+  { id: 'siren', minThreat: 1.2, w: 4 }, { id: 'lancer', minThreat: 2.0, w: 4 },
+  { id: 'urchin', minThreat: 2.4, w: 3 }, { id: 'maw', minThreat: 3.0, w: 3 },
+  { id: 'chorister', minThreat: 3.6, w: 2 }, { id: 'seneschal', minThreat: 5.5, w: 1 },
+];
+const W3_BIOMES = ['ballroom', 'gardens', 'mausoleum', 'trench'];
+const W3_BOSSES = ['sunless_queen', 'regent', 'reliquary'];
 export const WORLDS = [
   { num: 1, name: 'THE SUNKEN REALM', sub: 'World I', sky: '#05060f',
     biomes: BIOME_IDS, bosses: ['librarian', 'leviathan', 'unwritten_king'],
@@ -22,17 +29,17 @@ export const WORLDS = [
       { id: 'custodian', minThreat: 4.5, w: 1 },
     ] },
   { num: 2, name: 'THE EMBER WASTES', sub: 'World II', sky: '#0c0505',
-    biomes: W2_BIOMES, bosses: W2_BOSSES, guardian: 'kiln_warden',
-    threatMult: 1.9, tiers: W2_TIERS },
-  { num: 3, name: 'THE DROWNED COURTS', sub: 'World III', sky: '#04080c',
-    biomes: W2_BIOMES, bosses: W2_BOSSES, guardian: 'kiln_warden',
-    threatMult: 2.9, tiers: W2_TIERS },
+    biomes: W2_BIOMES, bosses: ['sovereign', 'colossus', 'phoenix'],
+    guardian: 'kiln_warden', threatMult: 1.9, tiers: W2_TIERS },
+  { num: 3, name: 'THE DROWNED COURTS', sub: 'World III', sky: '#030a12',
+    biomes: W3_BIOMES, bosses: W3_BOSSES, guardian: 'seneschal',
+    threatMult: 2.9, tiers: W3_TIERS },
   { num: 4, name: 'THE HOLLOW CHOIR', sub: 'World IV', sky: '#080410',
-    biomes: W2_BIOMES, bosses: W2_BOSSES, guardian: 'kiln_warden',
-    threatMult: 4.1, tiers: W2_TIERS },
+    biomes: W3_BIOMES, bosses: W3_BOSSES, guardian: 'seneschal',
+    threatMult: 4.1, tiers: W3_TIERS },
   { num: 5, name: 'THE LAST ARCANUM', sub: 'World V', sky: '#0a0803',
-    biomes: W2_BIOMES, bosses: W2_BOSSES, guardian: 'kiln_warden',
-    threatMult: 5.5, tiers: W2_TIERS },
+    biomes: W3_BIOMES, bosses: W3_BOSSES, guardian: 'seneschal',
+    threatMult: 5.5, tiers: W3_TIERS },
 ] satisfies WorldDef[];
 
 // ── Rival souls ── simulated player encounters ──

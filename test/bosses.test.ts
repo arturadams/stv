@@ -5,8 +5,16 @@ import type { EnemyDef } from '../js/data/types.js';
 import { damageEnemy } from '../js/sim/combat.js';
 import { spawnEnemy } from '../js/sim/entities/spawn.js';
 import { engageBossGate } from '../js/sim/map/features.js';
+import { updateGame } from '../js/world.js';
 import { makeHeadlessGame, stepGame } from './helpers/headless.js';
 import type { HeadlessGame } from './helpers/headless.js';
+
+// stepGame wanders the player at full stride; the tide mechanics need a
+// player who stands still, so any displacement is provably the current's
+function stepIdle(game: HeadlessGame, seconds: number): void {
+  const idle = { up: false, down: false, left: false, right: false, dash: false };
+  for (let f = 0, n = Math.round(seconds * 60); f < n; f++) updateGame(game, 1 / 60, idle);
+}
 
 function makeLandmark(game: HeadlessGame) {
   return {
@@ -43,19 +51,19 @@ describe('three original bosses per world', () => {
         expect(def.boss).toBe(true);
       }
     }
-    // the six authored bosses each carry their own behavior — no reskins
-    const authored = [...WORLDS[0].bosses, ...WORLDS[1].bosses];
+    // the nine authored bosses each carry their own behavior — no reskins
+    const authored = [...WORLDS[0].bosses, ...WORLDS[1].bosses, ...WORLDS[2].bosses];
     const behaviors = authored.map(
       (id) => (ENEMIES[id as keyof typeof ENEMIES] as EnemyDef).behavior,
     );
-    expect(new Set(behaviors).size).toBe(6);
+    expect(new Set(behaviors).size).toBe(9);
   });
 
   it('cycles boss gates through the world roster', () => {
     const game = makeHeadlessGame(700);
     const expected = WORLDS[0].bosses;
     for (let i = 0; i < 3; i++) {
-      game.bossesSlain = i;
+      game.worldBossesSlain = i;
       game.zoneRegion = null;
       engageBossGate(game, makeLandmark(game));
       expect(game.activeBoss?.def.id).toBe(expected[i]);
@@ -74,9 +82,12 @@ describe('three original bosses per world', () => {
     ['sovereign', 2, 0],
     ['colossus', 2, 1],
     ['phoenix', 2, 2],
+    ['sunless_queen', 3, 0],
+    ['regent', 3, 1],
+    ['reliquary', 3, 2],
   ] as const)('%s fights, telegraphs, and dies headlessly', (id, world, slot) => {
     const game = makeHeadlessGame(710 + slot, 'mage', world);
-    game.bossesSlain = slot;
+    game.worldBossesSlain = slot;
     engageBossGate(game, makeLandmark(game));
     const boss = game.activeBoss;
     if (!boss) throw new TypeError('expected active boss');
@@ -85,6 +96,11 @@ describe('three original bosses per world', () => {
     const seen = observeFight(game, 30, 720 + slot);
     // every boss telegraphs its attacks instead of hitscanning the player
     expect(seen.telegraphs).toBeGreaterThan(0);
+    // vanished bosses (submerged, moulting, sealed) shrug off damage — wait
+    // for the boss to surface before landing the killing blow
+    for (let s = 0; s < 10 && game.state === 'combat' && boss.state === 'vanish'; s++) {
+      stepGame(game, 1, 750 + s);
+    }
     if (game.state === 'combat') {
       const slain = game.bossesSlain;
       damageEnemy(game, boss, Number.MAX_SAFE_INTEGER);
@@ -94,7 +110,7 @@ describe('three original bosses per world', () => {
 
   it('leviathan submerges, breaches, and pools ink', () => {
     const game = makeHeadlessGame(730);
-    game.bossesSlain = 1;
+    game.worldBossesSlain = 1;
     engageBossGate(game, makeLandmark(game));
     const boss = game.activeBoss;
     if (!boss) throw new TypeError('expected leviathan');
@@ -111,7 +127,7 @@ describe('three original bosses per world', () => {
 
   it('the pyre matriarch moults once and hatches with half her life', () => {
     const game = makeHeadlessGame(740, 'mage', 2);
-    game.bossesSlain = 2;
+    game.worldBossesSlain = 2;
     engageBossGate(game, makeLandmark(game));
     const boss = game.activeBoss;
     if (!boss) throw new TypeError('expected phoenix');
@@ -165,5 +181,70 @@ describe('world two originals', () => {
     }
     expect(telegraphs).toBeGreaterThan(0);
     expect(hazards).toBeGreaterThan(0);
+  });
+});
+
+describe('world three originals', () => {
+  it('brine motes leave standing brine where they burst', () => {
+    const game = makeHeadlessGame(780, 'mage', 3);
+    const mote = spawnEnemy(game, 'mote', game.player.x + 60, game.player.y);
+    // the player's own bolts must not pop it before the fuse does
+    mote.hp = 9999;
+    mote.maxHp = 9999;
+    let sawBrine = false;
+    for (let s = 0; s < 6 && game.state === 'combat'; s++) {
+      stepIdle(game, 1);
+      if (game.hazards.some((hz) => hz.kind === 'brine')) sawBrine = true;
+    }
+    expect(sawBrine).toBe(true);
+  });
+
+  it("the court siren's song drags the player across the marble", () => {
+    const game = makeHeadlessGame(790, 'mage', 3);
+    const x0 = game.player.x;
+    const y0 = game.player.y;
+    const siren = spawnEnemy(game, 'siren', x0 + 260, y0);
+    // she must survive long enough to finish a verse
+    siren.hp = 9999;
+    siren.maxHp = 9999;
+    let dragged = 0;
+    for (let s = 0; s < 10 && game.state === 'combat'; s++) {
+      stepIdle(game, 1);
+      dragged = Math.max(dragged, Math.hypot(game.player.x - x0, game.player.y - y0));
+    }
+    expect(dragged).toBeGreaterThan(40);
+  });
+
+  it('the grief chorister mends the wounded court', () => {
+    const game = makeHeadlessGame(800, 'mage', 3);
+    // a stationary urchin sits inside the chorister's verse, so the heal
+    // has a target no matter where she drifts
+    spawnEnemy(game, 'chorister', game.player.x + 400, game.player.y);
+    const urchin = spawnEnemy(game, 'urchin', game.player.x + 420, game.player.y + 40);
+    urchin.hp = 10;
+    let mended = false;
+    for (let s = 0; s < 10 && game.state === 'combat' && !urchin.dead; s++) {
+      stepGame(game, 1, 801 + s);
+      if (urchin.hp > 10) mended = true;
+    }
+    expect(mended).toBe(true);
+  });
+
+  it('the weeping reliquary seals its shell and weeps brine', () => {
+    const game = makeHeadlessGame(810, 'mage', 3);
+    game.worldBossesSlain = 2;
+    engageBossGate(game, makeLandmark(game));
+    const boss = game.activeBoss;
+    if (!boss) throw new TypeError('expected reliquary');
+    expect(boss.def.id).toBe('reliquary');
+    let sawSealed = false;
+    let sawBrine = false;
+    for (let s = 0; s < 25 && game.state === 'combat'; s++) {
+      stepGame(game, 1, 811 + s);
+      if (boss.state === 'vanish') sawSealed = true;
+      if (game.hazards.some((hz) => hz.kind === 'brine')) sawBrine = true;
+    }
+    expect(sawSealed).toBe(true);
+    expect(sawBrine).toBe(true);
   });
 });

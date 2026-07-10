@@ -156,7 +156,7 @@ export type Telegraph =
   | (TelegraphBase & { shape: 'rect'; w: number; h: number; ang?: number })
   | (TelegraphBase & { shape: 'ring'; r: number; band: number });
 
-// ground left burning (or inked) by an enemy — hurts the player standing in it
+// ground left burning (or inked, or brined) by an enemy — hurts the player standing in it
 export interface GroundHazard extends Vec2 {
   r: number;
   t: number;
@@ -164,7 +164,7 @@ export interface GroundHazard extends Vec2 {
   dmg: number;
   tickT: number;
   color: string;
-  kind: 'ember' | 'ink';
+  kind: 'ember' | 'ink' | 'brine';
 }
 
 export interface Trap extends Vec2 {
@@ -264,6 +264,11 @@ export interface Ally extends RivalSoul {
   casting?: CastingState | null;
 }
 
+// the passage a world's last boss tears open — it does not wait forever
+export interface PortalState extends Vec2 {
+  timeLeft: number;
+}
+
 export interface DeckEntry {
   id: string;
   lvl: number;
@@ -305,7 +310,8 @@ export interface GameState {
   hasCrossClass: boolean;
   camera: Camera;
   chunks: Map<string, Chunk>;
-  portalOpen: boolean;
+  portal: PortalState | null;
+  portalRespawnT: number;
   zoneRegion: ZoneRegion | null;
   activeBoss: EnemyState | null;
   mm: MatchmakingState;
@@ -321,6 +327,7 @@ export interface GameState {
   runTime: number;
   campsCleared: number;
   bossesSlain: number;
+  worldBossesSlain: number;
   duelsWon: number;
   spawnT: number;
   gold: number;

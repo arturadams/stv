@@ -5,9 +5,9 @@ import { spawnEnemy } from '../js/sim/entities/spawn.js';
 import { makeHeadlessGame } from './helpers/headless.js';
 
 describe('effect registry', () => {
-  it('resolves every effect on all 77 cards without throwing', () => {
+  it('resolves every effect on all 93 cards without throwing', () => {
     const game = makeHeadlessGame(9001);
-    expect(CARD_LIST.length).toBe(77);
+    expect(CARD_LIST.length).toBe(93);
 
     const buffs = {
       dmgMult: 1, costMult: 1, channelMult: 1, radiusMult: 1, critChance: 0, repeat: 0, addStatus: [],

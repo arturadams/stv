@@ -1,7 +1,7 @@
 import { ENEMIES, WORLDS } from '../../data/index.js';
 import type { Camp, EnemyDef, Landmark } from '../../data/types.js';
 import { sfx } from '../../audio.js';
-import { spawnEnemy } from '../entities/spawn.js';
+import { spawnEnemy, spawnPointNear } from '../entities/spawn.js';
 import { floater, ringFx } from '../fx.js';
 import { advanceWorld } from '../run/lifecycle.js';
 import { makeCardReward, makeRelicReward, offerReward } from '../run/rewards.js';
@@ -99,6 +99,21 @@ export function campCleared(game: FeatureState, camp: Camp): void {
   sfx('reward');
 }
 
+// A sealed arena is a promise: the fight inside is the whole fight. Lesser
+// arcana are dismissed, not slain — no loot, no kill credit — and engaged
+// camps re-arm so they can be fought properly later.
+export function dismissAmbient(game: FeatureState): void {
+  for (const e of game.enemies) {
+    if (e.dead || e.def.boss || e.def.rival) continue;
+    e.dead = true;
+    game.fx.push({ kind: 'spawn', x: e.x, y: e.y, r: e.r * 1.6, color: e.def.glow, t: 0, life: 0.4 });
+    if (e.campRef) {
+      e.campRef.alive = Math.max(0, e.campRef.alive - 1);
+      if (e.campRef.alive <= 0) e.campRef.engaged = false;
+    }
+  }
+}
+
 export function engageBossGate(game: FeatureState, landmark: Landmark): void {
   landmark.engaged = true;
   game.zoneRegion = {
@@ -108,11 +123,13 @@ export function engageBossGate(game: FeatureState, landmark: Landmark): void {
     kind: 'boss',
     landmark,
   };
+  // the seal sweeps the field — the arena belongs to the boss alone
+  dismissAmbient(game);
   const threat = threatOf(game);
   // gates cycle through the world's three bosses, so no two consecutive
   // gates stage the same fight
   const bosses = worldDef(game).bosses;
-  const bossId = bosses[game.bossesSlain % bosses.length];
+  const bossId = bosses[game.worldBossesSlain % bosses.length];
   game.activeBoss = spawnEnemy(
     game,
     bossId,
@@ -128,34 +145,85 @@ export function engageBossGate(game: FeatureState, landmark: Landmark): void {
   sfx('bossintro');
 }
 
+const PORTAL_OPEN_TIME = 90;
+const PORTAL_RESPAWN_DELAY = 10;
+
+export function openPortal(game: FeatureState, x: number, y: number): void {
+  game.portal = { x, y, timeLeft: PORTAL_OPEN_TIME };
+  game.portalRespawnT = 0;
+  ringFx(game, x, y, 140, '#8fd8ff', 1.0);
+  sfx('enchant');
+}
+
 export function bossCleared(game: FeatureState): void {
   const landmark = game.zoneRegion?.landmark;
-  if (landmark) {
-    landmark.cleared = true;
-    // only the first boss gate cleared each world opens a portal — later
-    // gates still fight/reward normally, they just don't add a second exit
-    if (!game.portalOpen && game.world < WORLDS.length) {
-      landmark.portal = true;
-      game.portalOpen = true;
-    }
-  }
+  if (landmark) landmark.cleared = true;
   game.zoneRegion = null;
   game.activeBoss = null;
   game.bossesSlain++;
+  game.worldBossesSlain++;
   game.gold += 40;
   game.player.hp = Math.min(game.player.maxHp, game.player.hp + 30);
-  game.banner = {
-    title: 'THE GATE FALLS SILENT',
-    sub: landmark?.portal
-      ? 'A relic surfaces — and a passage to the next world opens'
-      : 'A relic surfaces from the wreckage',
-    t: 2.8,
-  };
+  // the court dissolves with its ruler, and the field rests a breath before
+  // ambient pressure resumes
+  dismissAmbient(game);
+  game.spawnT = Math.max(game.spawnT, 8);
+  // the portal onward opens only when every gate of this world has fallen
+  const remaining = Math.max(0, worldDef(game).bosses.length - game.worldBossesSlain);
+  if (remaining <= 0 && game.world < WORLDS.length && !game.portal && game.portalRespawnT <= 0) {
+    openPortal(game, landmark ? landmark.x : game.player.x, landmark ? landmark.y : game.player.y);
+    game.banner = {
+      title: 'THE LAST GATE FALLS',
+      sub: 'A passage to the next world tears open — enter before it seals',
+      t: 3,
+    };
+  } else {
+    game.banner = {
+      title: 'THE GATE FALLS SILENT',
+      sub: remaining > 0 && game.world < WORLDS.length
+        ? `A relic surfaces — ${remaining} ${remaining === 1 ? 'gate still seals' : 'gates still seal'} the passage onward`
+        : 'A relic surfaces from the wreckage',
+      t: 2.8,
+    };
+  }
   offerReward(game, makeRelicReward(game), 'Choose a relic');
   sfx('victory');
 }
 
+// the portal is patient, not eternal: it counts down (paused while a fight
+// has the player sealed in), collapses if missed, and re-manifests nearer
+// the player so a run is never softlocked out of progressing
+function updatePortal(game: FeatureState, dt: number): void {
+  if (game.zoneRegion) return;
+  if (game.portalRespawnT > 0) {
+    game.portalRespawnT -= dt;
+    if (game.portalRespawnT <= 0) {
+      const pt = spawnPointNear(game, 480, 640);
+      openPortal(game, pt.x, pt.y);
+      game.banner = { title: 'THE PASSAGE RETURNS', sub: 'It found you — enter before it seals again', t: 2.6 };
+    }
+    return;
+  }
+  const portal = game.portal;
+  if (!portal) return;
+  portal.timeLeft -= dt;
+  if (portal.timeLeft <= 0) {
+    game.portal = null;
+    game.portalRespawnT = PORTAL_RESPAWN_DELAY;
+    ringFx(game, portal.x, portal.y, 160, '#8fd8ff', 0.8);
+    game.banner = { title: 'THE PASSAGE COLLAPSES', sub: 'It will tear open again — soon, and nearer', t: 2.6 };
+    sfx('blink');
+    return;
+  }
+  const player = game.player;
+  if (Math.hypot(player.x - portal.x, player.y - portal.y) < 46) {
+    game.portal = null;
+    advanceWorld(game);
+  }
+}
+
 export function updateWorldFeatures(game: FeatureState, dt: number): void {
+  updatePortal(game, dt);
   const player = game.player;
   for (const chunk of chunksNear(game, player.x, player.y, 2)) {
     if (chunk.shrine) {
@@ -239,17 +307,6 @@ export function updateWorldFeatures(game: FeatureState, dt: number): void {
       ) < chunk.landmark.zoneR - 90
     ) {
       engageBossGate(game, chunk.landmark);
-    }
-    if (
-      chunk.landmark?.portal &&
-      Math.hypot(
-        player.x - chunk.landmark.x,
-        player.y - chunk.landmark.y,
-      ) < 42
-    ) {
-      chunk.landmark.portal = false;
-      advanceWorld(game);
-      return;
     }
   }
 }
