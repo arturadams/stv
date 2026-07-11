@@ -3,6 +3,7 @@ import { createGame, updateGame } from './world.js';
 import { render } from './render.js';
 import { initUI, updateUI } from './ui.js';
 import { initAudio, toggleMute } from './audio.js';
+import { initTouch } from './touch.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -75,6 +76,11 @@ window.addEventListener('keyup', (e) => {
   if (k) input[k] = false;
 });
 window.addEventListener('blur', () => { for (const k of Object.keys(input)) input[k] = false; });
+
+initTouch(input, {
+  onPause: () => { if (game.state === 'combat') setPaused(!paused); },
+  onInteract: initAudio,
+});
 
 let last = performance.now();
 function frame(now) {

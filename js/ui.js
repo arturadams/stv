@@ -181,6 +181,22 @@ function attachTooltip(el, def) {
     els.tooltip.style.left = x + 'px'; els.tooltip.style.top = y + 'px';
   });
   el.addEventListener('mouseleave', () => els.tooltip.classList.add('hidden'));
+
+  // touch: tap the card to inspect it, tap anywhere else to dismiss
+  el.addEventListener('click', () => {
+    if (!document.body.classList.contains('touch-mode')) return;
+    els.tooltip.innerHTML = tooltipHTML(def);
+    els.tooltip.classList.remove('hidden');
+    const r = el.getBoundingClientRect();
+    let x = r.left + r.width / 2 - els.tooltip.offsetWidth / 2;
+    x = Math.max(8, Math.min(x, window.innerWidth - els.tooltip.offsetWidth - 8));
+    let y = r.top - els.tooltip.offsetHeight - 10;
+    if (y < 8) y = Math.min(r.bottom + 10, window.innerHeight - els.tooltip.offsetHeight - 8);
+    els.tooltip.style.left = x + 'px'; els.tooltip.style.top = y + 'px';
+    document.addEventListener('pointerdown', (ev) => {
+      if (!el.contains(ev.target)) els.tooltip.classList.add('hidden');
+    }, { once: true, capture: true });
+  });
 }
 
 // ── per-frame update ──

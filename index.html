@@ -2,13 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Arcana Engine — a real-time deckbuilding roguelite</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas id="game"></canvas>
   <div id="vignette"></div>
+
+  <!-- Touch controls: shown only on touch devices (see touch.js) -->
+  <div id="touch-controls" class="hidden">
+    <div id="touch-layer"></div>
+    <div id="joy-base" class="hidden"><div id="joy-nub"></div></div>
+    <button id="dash-btn">➹</button>
+    <button id="pause-btn">❚❚</button>
+  </div>
 
   <!-- HUD -->
   <div id="hud">
@@ -78,9 +86,13 @@
       <p class="title-tag">An endless cursed realm. Your hero fights on their own —<br/>
       your deck transforms <i>how</i>. Cards are events, not bullets.</p>
       <div id="class-row"></div>
-      <div class="title-rules">
+      <div class="title-rules kb-rules">
         <span><b>WASD</b> move</span><span><b>SPACE</b> dash</span>
         <span><b>P</b> pause</span><span><b>M</b> mute</span>
+      </div>
+      <div class="title-rules touch-rules">
+        <span><b>DRAG</b> move</span><span><b>➹</b> dash</span>
+        <span><b>❚❚</b> pause</span><span><b>TAP CARD</b> inspect</span>
       </div>
       <p class="title-hint">The engine draws, channels and resolves your cards on its own.
       Powers transform your basic attack; mobility cards take over your Dash;
