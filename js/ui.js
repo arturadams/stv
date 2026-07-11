@@ -42,6 +42,8 @@ export function initUI(game) {
     overlaySetup: $('setup-overlay'), setupClass: $('setup-class'),
     worldRow: $('world-row'), startCards: $('start-cards'),
     tooltip: $('tooltip'), stolen: $('stolen-note'),
+    portrait: $('portrait-plate'), portraitGlyph: $('portrait-glyph'), portraitWorld: $('portrait-world'),
+    clock: $('run-clock'),
   };
 
   buildClassSelect(game);
@@ -212,8 +214,19 @@ export function updateUI(game) {
   els.flowText.textContent = `${Math.floor(eng.flow)} / ${eng.maxFlow}`;
   els.flowBar.classList.toggle('flow-full', eng.flow >= eng.maxFlow);
 
+  // portrait plate: class glyph + world badge, plus the run clock
+  const cls = CLASSES[game.playerClass];
+  if (els.portrait.dataset.cls !== (game.playerClass || '')) {
+    els.portrait.dataset.cls = game.playerClass || '';
+    els.portraitGlyph.textContent = cls ? cls.glyph : '✦';
+    els.portrait.style.setProperty('--c', cls ? cls.color : '#5c6672');
+  }
+  els.portraitWorld.textContent = game.state === 'title' ? '' : game.world;
+  const rt = Math.floor(game.runTime || 0);
+  els.clock.textContent = `${Math.floor(rt / 60)}:${String(rt % 60).padStart(2, '0')}`;
+
   // class resource (Rage / Opportunity)
-  const res = (CLASSES[game.playerClass] || {}).resource;
+  const res = (cls || {}).resource;
   if (res && game.state !== 'title') {
     els.resWrap.classList.remove('hidden');
     els.resLabel.textContent = res.name;
@@ -418,12 +431,18 @@ setInterval(() => {
 
 function rebuildRelics(game) {
   els.relics.innerHTML = '';
-  for (const r of game.relics) {
+  const slots = Math.max(6, Math.ceil(game.relics.length / 3) * 3); // inventory grid, 3 per row
+  for (let i = 0; i < slots; i++) {
+    const r = game.relics[i];
     const el = document.createElement('div');
-    el.className = 'relic';
-    el.style.setProperty('--c', r.color);
-    el.textContent = r.glyph;
-    el.title = `${r.name} — ${r.text}`;
+    if (r) {
+      el.className = 'relic';
+      el.style.setProperty('--c', r.color);
+      el.textContent = r.glyph;
+      el.title = `${r.name} — ${r.text}`;
+    } else {
+      el.className = 'relic empty';
+    }
     els.relics.appendChild(el);
   }
 }

@@ -20,24 +20,12 @@
 
   <!-- HUD -->
   <div id="hud">
-    <div id="topleft">
-      <div class="bar-label">VITALITY</div>
-      <div id="hp-bar" class="bar"><div id="hp-fill"></div><span id="hp-text" class="bar-text"></span></div>
-      <div class="bar-label">FLOW</div>
-      <div id="flow-bar" class="bar"><div id="flow-fill"></div><span id="flow-text" class="bar-text"></span></div>
-      <div id="res-wrap" class="hidden">
-        <div class="bar-label" id="res-label"></div>
-        <div id="res-bar" class="bar"><div id="res-fill"></div><span id="res-text" class="bar-text"></span></div>
-      </div>
-      <div id="armor-chip"></div>
-      <div id="powers"></div>
-      <div id="chips"></div>
-    </div>
-    <div id="topright">
+    <!-- top bar: realm name + run clock, Dota scoreboard style -->
+    <div id="topbar">
       <div id="encounter-label"></div>
-      <div id="gold-chip"></div>
-      <div id="relics"></div>
+      <div id="run-clock">0:00</div>
     </div>
+
     <div id="combo" class="hidden"></div>
     <div id="stolen-note" class="hidden"></div>
     <div id="boss-bar" class="hidden">
@@ -51,27 +39,51 @@
     <!-- the enlarged pop of whatever card just started casting -->
     <div id="card-pop"></div>
 
-    <!-- the card pipeline: Deck → Queue → Active → Discard -->
-    <div id="pipeline">
-      <div class="pile" id="deck-pile">
-        <div class="pile-card"><span class="pile-glyph">⎘</span><span id="deck-count">0</span></div>
-        <div class="pile-label">DECK</div>
+    <!-- bottom console: portrait · pipeline over vitals · relic inventory -->
+    <div id="console">
+      <div id="buff-row">
+        <div id="powers"></div>
+        <div id="chips"></div>
       </div>
-      <div class="pipe-arrow">❯</div>
-      <div id="queue-wrap">
-        <div id="queue-row"></div>
-        <div class="pile-label">QUEUE</div>
-      </div>
-      <div class="pipe-arrow">❯</div>
-      <div id="channel-wrap">
-        <div id="channel-slot"></div>
-        <div class="pile-label">ACTIVE</div>
-        <div id="active-name"></div>
-      </div>
-      <div class="pipe-arrow">❯</div>
-      <div class="pile" id="discard-pile">
-        <div class="pile-card dim"><span class="pile-glyph">☓</span><span id="discard-count">0</span></div>
-        <div class="pile-label">DISCARD</div>
+      <div id="console-inner">
+        <div id="portrait-plate">
+          <span id="portrait-glyph">✦</span>
+          <span id="portrait-world"></span>
+        </div>
+        <div id="console-center">
+          <!-- the card pipeline: Deck → Queue → Active → Discard -->
+          <div id="pipeline">
+            <div class="pile" id="deck-pile">
+              <div class="pile-card"><span class="pile-glyph">⎘</span><span id="deck-count">0</span></div>
+              <div class="pile-label">DECK</div>
+            </div>
+            <div class="pipe-arrow">❯</div>
+            <div id="queue-wrap">
+              <div id="queue-row"></div>
+              <div class="pile-label">QUEUE</div>
+            </div>
+            <div class="pipe-arrow">❯</div>
+            <div id="channel-wrap">
+              <div id="channel-slot"></div>
+              <div class="pile-label">ACTIVE</div>
+              <div id="active-name"></div>
+            </div>
+            <div class="pipe-arrow">❯</div>
+            <div class="pile" id="discard-pile">
+              <div class="pile-card dim"><span class="pile-glyph">☓</span><span id="discard-count">0</span></div>
+              <div class="pile-label">DISCARD</div>
+            </div>
+          </div>
+          <div id="vitals">
+            <div id="hp-bar" class="bar hp"><div id="hp-fill"></div><span id="hp-text" class="bar-text"></span><span id="armor-chip"></span></div>
+            <div id="flow-bar" class="bar flow"><div id="flow-fill"></div><span id="flow-text" class="bar-text"></span></div>
+            <div id="res-wrap" class="bar res hidden"><div id="res-fill"></div><span id="res-label"></span><span id="res-text" class="bar-text"></span></div>
+          </div>
+        </div>
+        <div id="console-right">
+          <div id="relics"></div>
+          <div id="gold-chip"></div>
+        </div>
       </div>
     </div>
   </div>
