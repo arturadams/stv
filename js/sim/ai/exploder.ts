@@ -15,9 +15,10 @@ registerBehavior<undefined>('exploder', {
         for (const o of enemiesIn(game, e.x, e.y, r)) {
           if (o !== e) damageEnemy(game, o, e.def.dmg * 0.5, { quiet: true });
         }
-        // brine motes leave the burst pooled on the marble
+        // brine motes leave the burst pooled on the marble; ringing penitents
+        // leave the floor tolling
         const hz = e.def.boomHazard;
-        if (hz) dropHazard(game, e.x, e.y, hz.r, hz.dmg, hz.dur, e.def.glow, 'brine');
+        if (hz) dropHazard(game, e.x, e.y, hz.r, hz.dmg, hz.dur, e.def.glow, hz.kind || 'brine');
         game.fx.push({ kind: 'blast', x: e.x, y: e.y, r, color: e.def.glow, t: 0, life: 0.5 });
         shake(game, 8);
         sfx('boom');

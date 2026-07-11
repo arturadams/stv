@@ -21,6 +21,9 @@ import './siren.js';
 import './urchin.js';
 import './undertow.js';
 import './mender.js';
+import './toller.js';
+import './echoer.js';
+import './chorus.js';
 import './boss.js';
 import './leviathan.js';
 import './king.js';
@@ -31,6 +34,9 @@ import './rival.js';
 import './queen.js';
 import './regent.js';
 import './reliquary.js';
+import './carillon.js';
+import './antiphon.js';
+import './silence.js';
 
 export function touchAttack(game: GameState, e: EnemyState, dist: number, dt: number): void {
   const p = game.player;

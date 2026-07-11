@@ -103,4 +103,40 @@ export const ENEMIES = {
     dmg: 24, behavior: 'boss_regent', boss: true, color: '#0c2230', glow: '#4a90d9', shards: 22 },
   reliquary: { id: 'reliquary', name: 'The Weeping Reliquary', role: 'boss', hp: 1600, speed: 0, radius: 38,
     dmg: 18, behavior: 'boss_reliquary', boss: true, minion: 'mote', color: '#242a3a', glow: '#c9a0ff', shards: 22 },
+
+  // ═══ World IV: The Hollow Choir — a basilica whose congregation sang
+  // until the song took everything, and kept singing. The echo is the theme
+  // made mechanical: strikes that land where you stood a beat ago, bells
+  // that ring in bands, and a choir that answers the horde with more of it.
+  // The realm's one rule: never stand where you already stood. ═══
+  hollow: { id: 'hollow', name: 'Hollowed Votary', role: 'swarm', hp: 34, speed: 140, radius: 13,
+    dmg: 11, behavior: 'chase', color: '#2a2438', glow: '#b48cff', shards: 1 },
+  penitent: { id: 'penitent', name: 'Ringing Penitent', role: 'exploder', hp: 24, speed: 116, radius: 14,
+    dmg: 22, behavior: 'exploder', fuse: 0.9, boomR: 96, boomHazard: { r: 64, dmg: 5, dur: 4.5, kind: 'toll' },
+    color: '#332a20', glow: '#e8dcc0', shards: 1 },
+  lector: { id: 'lector', name: 'Hymn Lector', role: 'sniper', hp: 46, speed: 58, radius: 16,
+    dmg: 14, behavior: 'ranged', range: 400, fireRate: 2.6, projSpeed: 205, color: '#241c30', glow: '#8fa8ff', shards: 2 },
+  sexton: { id: 'sexton', name: 'Bell-Sexton', role: 'charger', hp: 100, speed: 68, radius: 22,
+    dmg: 19, behavior: 'charger', chargeRange: 430, chargeTel: 0.8, chargeSpeed: 720, chargeDist: 540,
+    color: '#2e2418', glow: '#d9985b', shards: 3 },
+  toller: { id: 'toller', name: 'Funeral Toll', role: 'turret', hp: 72, speed: 0, radius: 18,
+    dmg: 13, behavior: 'toller', range: 620, waveEvery: 4.4, waveR: 260, waveTel: 1.1, waveDmg: 14,
+    color: '#201a2c', glow: '#c9a0ff', shards: 2 },
+  echoer: { id: 'echoer', name: 'Reverberant Shade', role: 'assassin', hp: 48, speed: 150, radius: 14,
+    dmg: 13, behavior: 'echoer', echoEvery: 3.2, echoDelay: 1.2, echoR: 80, echoDmg: 15,
+    color: '#1c1826', glow: '#e6e0f2', shards: 3 },
+  chorus: { id: 'chorus', name: 'Hollow Chorus', role: 'support', hp: 52, speed: 100, radius: 15,
+    dmg: 8, behavior: 'chorus', summonEvery: 7, color: '#2e2a3a', glow: '#b48cff', shards: 3 },
+  maestro: { id: 'maestro', name: 'The Hollow Maestro', role: 'elite', hp: 460, speed: 56, radius: 30,
+    dmg: 22, behavior: 'warden', waveEvery: 7, waveR: 340, waveTel: 0.95, waveDmg: 24,
+    summonEvery: 9, summonId: 'hollow',
+    elite: true, color: '#221a30', glow: '#c9a0ff', shards: 10 },
+
+  // ── World IV bosses — three voices of the hollowed basilica ──
+  carillon: { id: 'carillon', name: 'The Ninefold Carillon', role: 'boss', hp: 2300, speed: 30, radius: 42,
+    dmg: 24, behavior: 'boss_carillon', boss: true, color: '#241c14', glow: '#d9985b', shards: 26 },
+  antiphon: { id: 'antiphon', name: 'The Antiphon', role: 'boss', hp: 2050, speed: 170, radius: 30,
+    dmg: 20, behavior: 'boss_antiphon', boss: true, color: '#262038', glow: '#e6e0f2', shards: 26 },
+  silence: { id: 'silence', name: 'The Grand Silence', role: 'boss', hp: 2500, speed: 42, radius: 40,
+    dmg: 22, behavior: 'boss_silence', boss: true, minion: 'hollow', color: '#100c1c', glow: '#b48cff', shards: 26 },
 } satisfies Record<string, EnemyDef>;

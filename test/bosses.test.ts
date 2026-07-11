@@ -51,12 +51,14 @@ describe('three original bosses per world', () => {
         expect(def.boss).toBe(true);
       }
     }
-    // the nine authored bosses each carry their own behavior — no reskins
-    const authored = [...WORLDS[0].bosses, ...WORLDS[1].bosses, ...WORLDS[2].bosses];
+    // the twelve authored bosses each carry their own behavior — no reskins
+    const authored = [
+      ...WORLDS[0].bosses, ...WORLDS[1].bosses, ...WORLDS[2].bosses, ...WORLDS[3].bosses,
+    ];
     const behaviors = authored.map(
       (id) => (ENEMIES[id as keyof typeof ENEMIES] as EnemyDef).behavior,
     );
-    expect(new Set(behaviors).size).toBe(9);
+    expect(new Set(behaviors).size).toBe(12);
   });
 
   it('cycles boss gates through the world roster', () => {
@@ -85,6 +87,9 @@ describe('three original bosses per world', () => {
     ['sunless_queen', 3, 0],
     ['regent', 3, 1],
     ['reliquary', 3, 2],
+    ['carillon', 4, 0],
+    ['antiphon', 4, 1],
+    ['silence', 4, 2],
   ] as const)('%s fights, telegraphs, and dies headlessly', (id, world, slot) => {
     const game = makeHeadlessGame(710 + slot, 'mage', world);
     game.worldBossesSlain = slot;
@@ -246,5 +251,84 @@ describe('world three originals', () => {
     }
     expect(sawSealed).toBe(true);
     expect(sawBrine).toBe(true);
+  });
+});
+
+describe('world four originals', () => {
+  it('ringing penitents leave the floor tolling where they burst', () => {
+    const game = makeHeadlessGame(820, 'mage', 4);
+    const penitent = spawnEnemy(game, 'penitent', game.player.x + 60, game.player.y);
+    // the player's own bolts must not pop it before the fuse does
+    penitent.hp = 9999;
+    penitent.maxHp = 9999;
+    let sawToll = false;
+    for (let s = 0; s < 6 && game.state === 'combat'; s++) {
+      stepIdle(game, 1);
+      if (game.hazards.some((hz) => hz.kind === 'toll')) sawToll = true;
+    }
+    expect(sawToll).toBe(true);
+  });
+
+  it('the funeral toll rings telegraphed annuli around itself', () => {
+    const game = makeHeadlessGame(830, 'mage', 4);
+    const toller = spawnEnemy(game, 'toller', game.player.x + 300, game.player.y);
+    toller.hp = 9999;
+    toller.maxHp = 9999;
+    let rings = 0;
+    for (let s = 0; s < 10 && game.state === 'combat'; s++) {
+      stepIdle(game, 1);
+      rings += game.telegraphs.filter((tg) => tg.shape === 'ring').length;
+    }
+    expect(rings).toBeGreaterThan(0);
+  });
+
+  it('the reverberant shade strikes where the player stood a beat ago', () => {
+    const game = makeHeadlessGame(840, 'mage', 4);
+    const shade = spawnEnemy(game, 'echoer', game.player.x + 260, game.player.y);
+    shade.hp = 9999;
+    shade.maxHp = 9999;
+    // an idle player IS their own past position — the echo must find them
+    let circles = 0;
+    for (let s = 0; s < 10 && game.state === 'combat'; s++) {
+      stepIdle(game, 1);
+      circles += game.telegraphs.filter((tg) => tg.shape === 'circle').length;
+    }
+    expect(circles).toBeGreaterThan(0);
+  });
+
+  it('the hollow chorus answers the congregation with copies', () => {
+    const game = makeHeadlessGame(850, 'mage', 4);
+    // a stationary toller sits inside the chorus's verse, so the answer
+    // has a subject no matter where the singers drift
+    const chorus = spawnEnemy(game, 'chorus', game.player.x + 400, game.player.y);
+    chorus.hp = 9999;
+    chorus.maxHp = 9999;
+    const toller = spawnEnemy(game, 'toller', game.player.x + 420, game.player.y + 40);
+    toller.hp = 9999;
+    toller.maxHp = 9999;
+    let answered = false;
+    for (let s = 0; s < 12 && game.state === 'combat' && !answered; s++) {
+      stepGame(game, 1, 851 + s);
+      if (game.enemies.filter((e) => e.def.id === 'toller').length > 1) answered = true;
+    }
+    expect(answered).toBe(true);
+  });
+
+  it('the grand silence flings note-walls with a gap of true silence', () => {
+    const game = makeHeadlessGame(860, 'mage', 4);
+    game.worldBossesSlain = 2;
+    engageBossGate(game, makeLandmark(game));
+    const boss = game.activeBoss;
+    if (!boss) throw new TypeError('expected the grand silence');
+    expect(boss.def.id).toBe('silence');
+    let sawWall = false;
+    let sawToll = false;
+    for (let s = 0; s < 25 && game.state === 'combat'; s++) {
+      stepGame(game, 1, 861 + s);
+      if (game.enemyProjectiles.length >= 12) sawWall = true;
+      if (game.hazards.some((hz) => hz.kind === 'toll')) sawToll = true;
+    }
+    expect(sawWall).toBe(true);
+    expect(sawToll).toBe(true);
   });
 });

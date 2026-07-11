@@ -11,12 +11,12 @@ import {
 } from '../js/data/index.js';
 
 describe('typed data layer', () => {
-  it('preserves all 93 uniquely identified cards', () => {
+  it('preserves all 109 uniquely identified cards', () => {
     const ids = CARD_LIST.map((card) => card.id);
 
-    expect(CARD_LIST).toHaveLength(93);
-    expect(new Set(ids)).toHaveLength(93);
-    expect(Object.keys(CARDS)).toHaveLength(93);
+    expect(CARD_LIST).toHaveLength(109);
+    expect(new Set(ids)).toHaveLength(109);
+    expect(Object.keys(CARDS)).toHaveLength(109);
   });
 
   it('exports every gameplay data collection', () => {

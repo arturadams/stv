@@ -45,7 +45,8 @@ const WORLD_THEMES = [
   [1, 'arcane'],
   [2, 'ember'],
   [3, 'abyss'],
-  [4, 'abyss'],
+  [4, 'requiem'],
+  [5, 'requiem'],
 ] as const;
 
 describe('themed render smoke', () => {

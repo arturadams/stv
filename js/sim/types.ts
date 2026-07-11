@@ -11,6 +11,7 @@ import type {
   EffectCtx,
   ElementId,
   EnemyState,
+  HazardKind,
   MoveEmpower,
   MoveSpec,
   ProjectileSpec,
@@ -164,7 +165,7 @@ export interface GroundHazard extends Vec2 {
   dmg: number;
   tickT: number;
   color: string;
-  kind: 'ember' | 'ink' | 'brine';
+  kind: HazardKind;
 }
 
 export interface Trap extends Vec2 {

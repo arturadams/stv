@@ -32,5 +32,16 @@ export const BIOMES = {
     grout: 'rgba(8,8,14,0.85)', accent: '#e6e0f2', deco: '⚱♰☽✧', hazard: 'rgba(16,16,28,0.92)', hazardEdge: 'rgba(230,224,242,0.3)' },
   trench: { id: 'trench', name: 'The Abyssal Trench', theme: 'abyss', floor: [5, 12, 24], tileVar: [4, 8, 14],
     grout: 'rgba(1,4,10,0.9)', accent: '#4a90d9', deco: '♆⚓✵☠', hazard: 'rgba(3,10,22,0.94)', hazardEdge: 'rgba(74,144,217,0.35)' },
+  // World IV — the Hollow Choir: a basilica gone bone-pale and resonant.
+  // Everything World III drowned, this world emptied: dust, votive light,
+  // and floors etched with the ripples of a song that never stopped.
+  nave: { id: 'nave', name: 'The Voiceless Nave', theme: 'requiem', floor: [24, 20, 36], tileVar: [12, 10, 16],
+    grout: 'rgba(8,6,16,0.85)', accent: '#b48cff', deco: '♰♪☽✧', hazard: 'rgba(14,8,26,0.92)', hazardEdge: 'rgba(180,140,255,0.3)' },
+  ossuary: { id: 'ossuary', name: 'The Singing Ossuary', theme: 'requiem', floor: [34, 30, 24], tileVar: [15, 13, 10],
+    grout: 'rgba(12,10,6,0.85)', accent: '#e8dcc0', deco: '⚱☠♩✦', hazard: 'rgba(26,22,14,0.92)', hazardEdge: 'rgba(232,220,192,0.3)' },
+  belfry: { id: 'belfry', name: 'The Toppled Belfry', theme: 'requiem', floor: [28, 22, 14], tileVar: [14, 11, 8],
+    grout: 'rgba(10,7,4,0.85)', accent: '#d9985b', deco: '♫✵⚸♪', hazard: 'rgba(24,16,8,0.92)', hazardEdge: 'rgba(217,152,91,0.35)' },
+  organum: { id: 'organum', name: 'The Organum Deep', theme: 'requiem', floor: [16, 16, 32], tileVar: [10, 10, 16],
+    grout: 'rgba(5,5,12,0.85)', accent: '#8fa8ff', deco: '∿♪❖✧', hazard: 'rgba(10,10,24,0.92)', hazardEdge: 'rgba(143,168,255,0.3)' },
 } satisfies Record<string, BiomeDef>;
 export const BIOME_IDS = ['archive', 'ashen', 'verdant', 'umbral'];

@@ -32,6 +32,7 @@ function makeChunkCanvas(game, ch) {
   g.fillRect(0, 0, CHUNK, CHUNK);
   if (b.theme === 'ember') paintEmberFloor(game, g, ch);
   else if (b.theme === 'abyss') paintAbyssFloor(game, g, ch);
+  else if (b.theme === 'requiem') paintRequiemFloor(game, g, ch);
   else paintArcaneFloor(game, g, ch);
   paintDeco(g, ch);
   for (const p of ch.pools) paintPool(g, ch, p);
@@ -190,6 +191,66 @@ function paintAbyssFloor(game, g, ch) {
   }
 }
 
+// World IV floor: worn basilica flagstones under a skin of bone dust — and
+// where the song fell hardest, ripples frozen into the stone: concentric
+// etchings around a point, like a struck surface that never sprang back.
+// Rarely, a stave: five ruled lines crossing the chunk with the notes gone.
+function paintRequiemFloor(game, g, ch) {
+  const b = ch.biome;
+  const [fr, fg, fb] = b.floor, [vr, vg, vb] = b.tileVar;
+  const tile = 140;
+  const n = CHUNK / tile;
+  const tx0 = ch.cx * n, ty0 = ch.cy * n;
+  for (let ty = 0; ty < n; ty++) {
+    for (let tx = 0; tx < n; tx++) {
+      const v = tileHash(tx0 + tx, ty0 + ty, game.worldSeed);
+      g.fillStyle = `rgb(${fr + v * vr | 0}, ${fg + v * vg | 0}, ${fb + v * vb | 0})`;
+      g.fillRect(tx * tile + 1, ty * tile + 1, tile - 2, tile - 2);
+      if (tileHash(tx0 + tx, ty0 + ty, game.worldSeed + 5) < 0.13) { // dust-drowned slab
+        g.fillStyle = 'rgba(226,218,236,0.05)';
+        g.fillRect(tx * tile + 1, ty * tile + 1, tile - 2, tile - 2);
+      }
+    }
+  }
+  g.strokeStyle = b.grout; g.lineWidth = 2.5;
+  for (let x = 0; x <= CHUNK; x += tile) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, CHUNK); g.stroke(); }
+  for (let y = 0; y <= CHUNK; y += tile) { g.beginPath(); g.moveTo(0, y); g.lineTo(CHUNK, y); g.stroke(); }
+  // frozen ripples: sound that hit the floor and stayed
+  for (let i = 0; i < 2; i++) {
+    if (tileHash(ch.cx * 2 + i, ch.cy, game.worldSeed + 71) > 0.55) continue;
+    const px = CHUNK * (0.2 + 0.6 * tileHash(ch.cx + i, ch.cy, game.worldSeed + 72));
+    const py = CHUNK * (0.2 + 0.6 * tileHash(ch.cx, ch.cy + i, game.worldSeed + 73));
+    const rings = 3 + (tileHash(ch.cx, ch.cy * 2 + i, game.worldSeed + 74) * 3 | 0);
+    for (let k = 0; k < rings; k++) {
+      g.strokeStyle = hexA(b.accent, 0.09 - k * 0.015);
+      g.lineWidth = 2 - k * 0.3;
+      g.beginPath(); g.arc(px, py, 26 + k * 30, 0, Math.PI * 2); g.stroke();
+    }
+  }
+  // the stave — the realm's ledger, wiped
+  if (tileHash(ch.cx, ch.cy, game.worldSeed + 9) < 0.14) {
+    const sy = CHUNK * (0.25 + 0.5 * tileHash(ch.cx, ch.cy, game.worldSeed + 10));
+    g.strokeStyle = hexA(b.accent, 0.08); g.lineWidth = 1.5;
+    for (let k = 0; k < 5; k++) {
+      g.beginPath(); g.moveTo(0, sy + k * 11); g.lineTo(CHUNK, sy + k * 11); g.stroke();
+    }
+    g.fillStyle = hexA(b.accent, 0.10); g.font = '15px Georgia, serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let k = 0; k < 3; k++) {
+      const hx = tileHash(ch.cx * 3 + k, ch.cy, game.worldSeed + 11);
+      g.fillText('♪', hx * CHUNK, sy + 22 + (hx * 3 | 0) * 11 - 11);
+    }
+  }
+  // drifts of bone dust settle against the seams
+  for (let i = 0; i < 5; i++) {
+    const hx = tileHash(ch.cx * 5 + i, ch.cy + i, game.worldSeed + 81);
+    const hy = tileHash(ch.cx + i, ch.cy * 5 + i, game.worldSeed + 82);
+    g.fillStyle = i % 2 ? 'rgba(230,222,238,0.04)' : 'rgba(8,6,14,0.14)';
+    ellipsePath(g, hx * CHUNK, hy * CHUNK, 36 + hx * 55, 15 + hy * 24, hx * Math.PI);
+    g.fill();
+  }
+}
+
 // scattered litter — cards everywhere, this realm runs on them — but each
 // world weathers them its own way: parchment, char, waterlogged pulp.
 function paintDeco(g, ch) {
@@ -204,6 +265,9 @@ function paintDeco(g, ch) {
       } else if (b.theme === 'abyss') {
         g.fillStyle = 'rgba(208,226,220,0.09)';
         g.strokeStyle = hexA(b.accent, 0.14);
+      } else if (b.theme === 'requiem') { // hymnal leaves, dust-bleached
+        g.fillStyle = 'rgba(228,220,236,0.07)';
+        g.strokeStyle = hexA(b.accent, 0.16);
       } else {
         g.fillStyle = 'rgba(210,196,160,0.10)';
         g.strokeStyle = 'rgba(217,180,91,0.12)';
@@ -259,6 +323,21 @@ function paintPool(g, ch, p) {
     ellipsePath(g, x, y, p.r * 0.8, p.r * 0.66); g.stroke();
     g.strokeStyle = 'rgba(226,246,242,0.16)'; g.lineWidth = 2; // cold rim glint
     g.beginPath(); g.ellipse(x, y, p.r * 0.92, p.r * 0.77, 0, Math.PI * 1.15, Math.PI * 1.6); g.stroke();
+  } else if (b.theme === 'requiem') {
+    // a silence pool: a disc of floor the sound fell out of — matte, ringed,
+    // and darker at the middle than any shadow in the room
+    const grad = g.createRadialGradient(x, y, p.r * 0.1, x, y, p.r);
+    grad.addColorStop(0, 'rgba(2,1,6,0.96)');
+    grad.addColorStop(0.7, b.hazard);
+    grad.addColorStop(1, 'rgba(20,16,30,0.8)');
+    g.fillStyle = grad;
+    ellipsePath(g, x, y, p.r, p.r * 0.86); g.fill();
+    g.strokeStyle = b.hazardEdge; g.lineWidth = 2;
+    ellipsePath(g, x, y, p.r, p.r * 0.86); g.stroke();
+    for (let i = 1; i <= 3; i++) { // the last ripples, caught mid-fall
+      g.strokeStyle = hexA(b.accent, 0.10 - i * 0.02); g.lineWidth = 1.2;
+      ellipsePath(g, x, y, p.r * (1 - i * 0.22), p.r * 0.86 * (1 - i * 0.22)); g.stroke();
+    }
   } else {
     g.fillStyle = b.hazard;
     ellipsePath(g, x, y, p.r, p.r * 0.82); g.fill();
@@ -338,10 +417,20 @@ export function render(game, ctx, W, H) {
 }
 
 // each world grades the frame: indigo archive dusk, furnace-light from below,
-// and in the drowned courts the surface far overhead lets shafts of day in
+// in the drowned courts the surface far overhead lets shafts of day in, and
+// the hollow choir breathes — one slow swell of pale light, like held breath
 function drawWorldTint(ctx, theme, W, H, t) {
   ctx.save();
-  if (theme === 'abyss') {
+  if (theme === 'requiem') {
+    ctx.globalCompositeOperation = 'lighter';
+    const swell = 0.03 + 0.02 * Math.sin(t * 0.45); // the realm inhales ~every 14s
+    const down = ctx.createLinearGradient(0, 0, 0, H * 0.6);
+    down.addColorStop(0, `rgba(196,172,255,${swell})`);
+    down.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = down;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (theme === 'abyss') {
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < 3; i++) {
       const drift = Math.sin(t * 0.08 + i * 2.1) * W * 0.12;
@@ -371,7 +460,8 @@ function drawWorldTint(ctx, theme, W, H, t) {
   }
   const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.38, W / 2, H / 2, Math.hypot(W, H) * 0.62);
   const edge = theme === 'ember' ? 'rgba(46,8,2,0.36)'
-    : theme === 'abyss' ? 'rgba(2,18,26,0.34)' : 'rgba(9,7,26,0.34)';
+    : theme === 'abyss' ? 'rgba(2,18,26,0.34)'
+      : theme === 'requiem' ? 'rgba(12,8,24,0.38)' : 'rgba(9,7,26,0.34)';
   g.addColorStop(0, 'rgba(0,0,0,0)');
   g.addColorStop(1, edge);
   ctx.fillStyle = g;
@@ -407,7 +497,8 @@ function drawPortal(game, ctx, t) {
 }
 
 // ── per-world air: dust hangs in the archive, embers climb off the wastes,
-// marine snow sinks through the drowned courts ──
+// marine snow sinks through the drowned courts, and in the hollow choir the
+// dust barely falls at all — it hangs where the singers stood ──
 function drawAtmosphere(game, ctx, t, W, H, scale) {
   const theme = worldTheme(game);
   const cam = game.camera;
@@ -441,6 +532,27 @@ function drawAtmosphere(game, ctx, t, W, H, scale) {
       ctx.fillStyle = hexA('#cfe8ee', Math.max(0.08, 0.14 + 0.1 * Math.sin(t * 1.3 + i * 2.6)));
       ctx.beginPath(); ctx.arc(x, y, 1 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
     }
+  } else if (theme === 'requiem') {
+    // bone dust, suspended — it trembles on the beat instead of falling,
+    // and now and then a stray note drifts up out of the floor
+    for (let i = 0; i < 36; i++) {
+      const seedX = ((i * 733 + 389) % 1021) * 3.1;
+      const seedY = ((i * 967 + 211) % 1013) * 2.7;
+      const tremble = Math.sin(t * 2.6 + i * 2.1) * 2.5;
+      const drift = Math.sin(t * 0.22 + i * 1.3) * 12 + t * 1.2;
+      const x = wrapX(seedX + tremble), y = wrapY(seedY + drift);
+      ctx.fillStyle = hexA('#ded4ec', 0.06 + 0.08 * (0.5 + 0.5 * Math.sin(t * 0.9 + i * 2.4)));
+      ctx.beginPath(); ctx.arc(x, y, 0.9 + (i % 3) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.font = '11px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < 5; i++) {
+      const seedX = ((i * 547 + 173) % 1021) * 3.3;
+      const seedY = ((i * 809 + 419) % 1013) * 2.9;
+      const rise = t * (5 + (i % 3) * 2.5);
+      const x = wrapX(seedX + Math.sin(t * 0.6 + i * 2.2) * 10), y = wrapY(seedY - rise);
+      ctx.fillStyle = hexA('#b48cff', 0.05 + 0.07 * (0.5 + 0.5 * Math.sin(t * 1.1 + i * 1.9)));
+      ctx.fillText(i % 2 ? '♪' : '♫', x, y);
+    }
   } else {
     // gold dust adrift between the stacks
     for (let i = 0; i < 26; i++) {
@@ -463,6 +575,7 @@ function drawChunkLife(game, ctx, ch, t) {
   for (const pil of ch.pillars) {
     if (theme === 'ember') drawShardCluster(ctx, ch.biome, pil, t);
     else if (theme === 'abyss') drawBrokenColumn(ctx, ch.biome, pil, t);
+    else if (theme === 'requiem') drawFallenBell(ctx, ch.biome, pil, t);
     else drawStonePillar(ctx, pil);
   }
   for (const p of ch.pools) drawPoolLife(ctx, ch.biome, p, t);
@@ -486,6 +599,7 @@ function drawChunkLife(game, ctx, ch, t) {
   for (const cd of ch.candles) {
     if (theme === 'ember') drawEmberVent(ctx, ch.biome, cd, t);
     else if (theme === 'abyss') drawDrownedLantern(ctx, ch.biome, cd, t);
+    else if (theme === 'requiem') drawVotiveStand(ctx, ch.biome, cd, t);
     else drawCandles(ctx, cd, t);
   }
   // enemy camp: cursed totem + banner ring
@@ -556,6 +670,13 @@ function drawChunkLife(game, ctx, ch, t) {
         ctx.fillRect(-15, -2.5, 30, 5);
         ctx.restore();
       }
+    } else if (theme === 'requiem') { // a ring of melted votive stubs
+      ctx.fillStyle = '#d4c8b8';
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + 0.3;
+        const oh = 3 + ((s.x + i * 5) % 5);
+        ctx.fillRect(s.x + Math.cos(a) * 16 - 1.5, s.y + Math.sin(a) * 11 - oh, 3, oh);
+      }
     } else { // log circle
       ctx.fillStyle = '#2c2016';
       for (let i = 0; i < 4; i++) {
@@ -605,6 +726,7 @@ const SANCTUARY_STYLE = {
   arcane: { flame: '255,170,70', core: '255,240,180', glow: 'rgba(255,180,80,0.16)', table: '#241d16', trim: 'rgba(217,180,91,0.5)' },
   ember: { flame: '255,120,50', core: '255,250,225', glow: 'rgba(255,140,60,0.18)', table: '#150d1c', trim: 'rgba(255,138,74,0.55)' },
   abyss: { flame: '110,230,200', core: '215,255,245', glow: 'rgba(110,230,200,0.14)', table: '#2e3a4c', trim: 'rgba(126,232,208,0.5)' },
+  requiem: { flame: '196,160,255', core: '244,236,255', glow: 'rgba(180,140,255,0.15)', table: '#241c30', trim: 'rgba(180,140,255,0.5)' },
 };
 
 // World I pillar: a worked stone drum, gold-banded
@@ -749,6 +871,76 @@ function drawDrownedLantern(ctx, b, cd, t) {
   }
 }
 
+// World IV pillar: a bell that fell and settled on its side — the frame is
+// long gone, but the bronze remembers its note and hums it into the dust
+function drawFallenBell(ctx, b, pil, t) {
+  const lean = (tileHash(pil.x | 0, pil.y | 0, 6) - 0.5) * 0.8;
+  ctx.save();
+  ctx.translate(pil.x, pil.y);
+  ctx.fillStyle = 'rgba(4,3,8,0.7)';
+  ctx.beginPath(); ctx.ellipse(0, 8, pil.r * 1.3, pil.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.rotate(lean);
+  // the hum: a ring that leaves the mouth and dies in the air
+  const hum = cycle(t * 0.25 + pil.x * 0.01, 1);
+  ctx.strokeStyle = hexA(b.accent, 0.16 * (1 - hum)); ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.ellipse(pil.r * 0.95, 0, 6 + hum * 26, (6 + hum * 26) * 1.4, 0, 0, Math.PI * 2); ctx.stroke();
+  // the body, mouth to the right: shoulder, waist, and flared lip
+  const gr = ctx.createLinearGradient(0, -pil.r, 0, pil.r);
+  gr.addColorStop(0, '#3a2c1c'); gr.addColorStop(0.5, '#52402a'); gr.addColorStop(1, '#241a10');
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.moveTo(-pil.r * 0.9, 0);
+  ctx.quadraticCurveTo(-pil.r * 0.9, -pil.r * 0.72, -pil.r * 0.2, -pil.r * 0.78);
+  ctx.quadraticCurveTo(pil.r * 0.55, -pil.r * 0.82, pil.r * 0.95, -pil.r * 0.95);
+  ctx.lineTo(pil.r * 0.95, pil.r * 0.95);
+  ctx.quadraticCurveTo(pil.r * 0.55, pil.r * 0.82, -pil.r * 0.2, pil.r * 0.78);
+  ctx.quadraticCurveTo(-pil.r * 0.9, pil.r * 0.72, -pil.r * 0.9, 0);
+  ctx.fill();
+  ctx.strokeStyle = hexA(b.accent, 0.4); ctx.lineWidth = 1.6; ctx.stroke();
+  // the crack it died of
+  ctx.strokeStyle = 'rgba(8,5,2,0.8)'; ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(pil.r * 0.9, -pil.r * 0.5);
+  ctx.lineTo(pil.r * 0.45, -pil.r * 0.15);
+  ctx.lineTo(pil.r * 0.6, pil.r * 0.2);
+  ctx.stroke();
+  // the mouth, and the dark inside it
+  ctx.fillStyle = '#0c0810';
+  ctx.beginPath(); ctx.ellipse(pil.r * 0.95, 0, pil.r * 0.22, pil.r * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(b.accent, 0.5); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(pil.r * 0.95, 0, pil.r * 0.22, pil.r * 0.95, 0, 0, Math.PI * 2); ctx.stroke();
+  // the clapper, thrown clear, still pointing home
+  ctx.fillStyle = '#3a3026';
+  ctx.beginPath(); ctx.arc(pil.r * 1.55, pil.r * 0.35, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(58,48,38,0.8)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(pil.r * 1.2, pil.r * 0.2); ctx.lineTo(pil.r * 1.5, pil.r * 0.33); ctx.stroke();
+  ctx.restore();
+}
+
+// World IV light: a standing candelabrum of votives that burn without heat —
+// the flames are the color of the realm's one remaining vowel
+function drawVotiveStand(ctx, b, cd, t) {
+  const fl = 0.75 + Math.sin(t * 5 + cd.x) * 0.12 + Math.sin(t * 13 + cd.y) * 0.06;
+  glow(ctx, cd.x, cd.y - 24, 64 * fl, hexA(b.accent, 0.10));
+  // the stand: a dark stem with three arms
+  ctx.strokeStyle = '#1c1624'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cd.x, cd.y); ctx.lineTo(cd.x, cd.y - 20); ctx.stroke();
+  ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.moveTo(cd.x - 11, cd.y - 18); ctx.quadraticCurveTo(cd.x, cd.y - 24, cd.x + 11, cd.y - 18); ctx.stroke();
+  ctx.lineCap = 'butt';
+  // three pale stubs, three cold flames
+  for (let i = -1; i <= 1; i++) {
+    const ox = i * 11, oy = i === 0 ? -24 : -18;
+    ctx.fillStyle = '#cfc4b4';
+    ctx.fillRect(cd.x + ox - 2, cd.y + oy - 6, 4, 6);
+    const ffl = fl + Math.sin(t * 9 + i * 2.4) * 0.08;
+    ctx.fillStyle = hexA(b.accent, 0.5 + ffl * 0.3);
+    ctx.beginPath(); ctx.ellipse(cd.x + ox, cd.y + oy - 10, 2.2, 4.6 * ffl, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hexA('#f4eeff', 0.7 * ffl);
+    ctx.beginPath(); ctx.ellipse(cd.x + ox, cd.y + oy - 9, 1, 2.2 * ffl, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 // pools breathe: lava pulses, seawater ripples, ink turns over in its sleep
 function drawPoolLife(ctx, b, p, t) {
   const seed = (p.x * 13 + p.y * 7) % 100;
@@ -777,6 +969,14 @@ function drawPoolLife(ctx, b, p, t) {
     ctx.ellipse(p.x + Math.cos(t * 0.4 + seed) * p.r * 0.3, p.y + Math.sin(t * 0.3 + seed) * p.r * 0.2,
       p.r * 0.42, p.r * 0.2, t * 0.2 + seed, 0, Math.PI * 2);
     ctx.fill();
+  } else if (b.theme === 'requiem') {
+    // silence pools drink inward: the ripples run backwards, into the dark
+    for (let i = 0; i < 2; i++) {
+      const rip = 1 - cycle(t * 0.25 + i * 0.5 + seed * 0.01, 1);
+      ctx.strokeStyle = hexA(b.accent, 0.12 * (1 - rip));
+      ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, p.r * rip, p.r * rip * 0.86, 0, 0, Math.PI * 2); ctx.stroke();
+    }
   } else {
     ctx.fillStyle = hexA(b.accent, 0.05 + Math.sin(t * 0.8 + seed) * 0.03);
     ctx.beginPath();
@@ -874,7 +1074,8 @@ function hexA(hex, a) {
   return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a))})`;
 }
 
-// ── ground hazards: burning slag and leviathan ink — the floor as a weapon ──
+// ── ground hazards: burning slag, leviathan ink, standing brine, tolling
+// stone — the floor as a weapon ──
 function drawHazard(ctx, hz, t) {
   const fade = Math.min(1, (hz.dur - hz.t) * 1.5, hz.t * 5);
   // deterministic per-hazard jitter so embers don't dance every frame
@@ -911,6 +1112,28 @@ function drawHazard(ctx, hz, t) {
       ctx.beginPath();
       ctx.arc(hz.x + Math.cos(a) * hz.r * 0.5, hz.y + Math.sin(a) * hz.r * 0.4 - cyc * 6, 1.2 + cyc * 1.6, 0, Math.PI * 2);
       ctx.stroke();
+    }
+  } else if (hz.kind === 'toll') {
+    // tolling ground: stone still ringing from a strike — stand on it and
+    // the note gets into your bones
+    ctx.fillStyle = 'rgba(10,7,18,0.68)';
+    ctx.beginPath(); ctx.ellipse(hz.x, hz.y, hz.r, hz.r * 0.88, seed, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA(hz.color, 0.45); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(hz.x, hz.y, hz.r, hz.r * 0.88, seed, 0, Math.PI * 2); ctx.stroke();
+    // rings pulse out on the beat, two per bar
+    for (let i = 0; i < 2; i++) {
+      const rip = cycle(t * 0.9 + i * 0.5 + seed, 1);
+      ctx.strokeStyle = hexA(hz.color, 0.4 * (1 - rip)); ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.ellipse(hz.x, hz.y, hz.r * rip, hz.r * rip * 0.88, seed, 0, Math.PI * 2); ctx.stroke();
+    }
+    // and the dust on it never settles
+    for (let i = 0; i < 3; i++) {
+      const cyc = cycle(t * (0.7 + (i % 2) * 0.3) + i * 1.5 + seed, 1.3);
+      const a = seed * 2 + i * 2.2;
+      ctx.fillStyle = hexA('#ded4ec', Math.max(0, 0.5 - cyc * 0.4));
+      ctx.beginPath();
+      ctx.arc(hz.x + Math.cos(a) * hz.r * 0.55, hz.y + Math.sin(a) * hz.r * 0.45 - cyc * 8, 1.3, 0, Math.PI * 2);
+      ctx.fill();
     }
   } else {
     // scorched base
@@ -1128,6 +1351,17 @@ function drawEnemy(ctx, e, t) {
   else if (id === 'sunless_queen') drawQueen(ctx, e, t);
   else if (id === 'regent') drawRegent(ctx, e, t);
   else if (id === 'reliquary') drawReliquary(ctx, e, t);
+  else if (id === 'hollow') drawHollow(ctx, e, t);
+  else if (id === 'penitent') drawPenitent(ctx, e, t);
+  else if (id === 'lector') drawLector(ctx, e, t);
+  else if (id === 'sexton') drawSexton(ctx, e, t);
+  else if (id === 'toller') drawToller(ctx, e, t);
+  else if (id === 'echoer') drawEchoer(ctx, e, t);
+  else if (id === 'chorus') drawChorus(ctx, e, t);
+  else if (id === 'maestro') drawMaestro(ctx, e, t);
+  else if (id === 'carillon') drawCarillon(ctx, e, t);
+  else if (id === 'antiphon') drawAntiphon(ctx, e, t);
+  else if (id === 'silence') drawSilence(ctx, e, t);
 
   if (flash) {
     ctx.globalCompositeOperation = 'lighter';
@@ -2487,6 +2721,486 @@ function drawReliquaryShell(ctx, e, t) {
     ctx.arc(Math.sin(i * 2.4) * e.r * 0.6, -e.r * 0.3 - cyc * 26, 1.5 + cyc * 1.8, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+// ═══ World IV — the hollow choir ═══
+
+// the hollowed votary — a robe still standing where its singer used to
+function drawHollow(ctx, e, t) {
+  const sway = Math.sin(e.wobble) * 0.1;
+  glow(ctx, 0, 0, e.r * 1.9, hexA(e.def.glow, 0.11));
+  ctx.save();
+  ctx.rotate(sway);
+  // the robe, hanging on nothing
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(0, -e.r * 1.15);
+  ctx.bezierCurveTo(e.r * 0.85, -e.r * 0.8, e.r * 0.9, e.r * 0.3, e.r * 0.55, e.r);
+  for (let i = 1; i >= -1; i--) ctx.lineTo(i * e.r * 0.28, e.r * (i % 2 ? 0.82 : 1.05));
+  ctx.bezierCurveTo(-e.r * 0.9, e.r * 0.3, -e.r * 0.85, -e.r * 0.8, 0, -e.r * 1.15);
+  ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.4); ctx.lineWidth = 1.4; ctx.stroke();
+  // the hood, open on the dark — the mouth of it still shaped for the note
+  ctx.fillStyle = '#0a0812';
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.6, e.r * 0.34, e.r * 0.42, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.55); ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.6, e.r * 0.34, e.r * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+  // a held O of glow deep in the hood
+  ctx.fillStyle = hexA(e.def.glow, 0.5 + Math.sin(t * 3 + e.wobble) * 0.15);
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.52, 2.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// the ringing penitent — it kneels, it swells, and its last confession is loud
+function drawPenitent(ctx, e, t) {
+  const fusing = e.state === 'fuse';
+  const swell = fusing ? 1 + Math.sin(t * 24) * 0.14 : 1 + Math.sin(e.wobble * 1.6) * 0.04;
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, fusing ? 0.3 : 0.11));
+  ctx.save();
+  ctx.scale(swell, 1 / swell);
+  // a hunched bell-shape: shoulders rounded over folded arms
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(-e.r, e.r * 0.8);
+  ctx.quadraticCurveTo(-e.r * 1.05, -e.r * 0.5, 0, -e.r * 0.95);
+  ctx.quadraticCurveTo(e.r * 1.05, -e.r * 0.5, e.r, e.r * 0.8);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.45); ctx.lineWidth = 1.5; ctx.stroke();
+  // the crack of light climbing its back as the note builds
+  ctx.strokeStyle = hexA(e.def.glow, fusing ? 0.85 + Math.sin(t * 28) * 0.15 : 0.35);
+  ctx.lineWidth = fusing ? 2.4 : 1.4;
+  ctx.beginPath();
+  ctx.moveTo(-e.r * 0.2, e.r * 0.7);
+  ctx.lineTo(e.r * 0.05, e.r * 0.15);
+  ctx.lineTo(-e.r * 0.12, -e.r * 0.3);
+  ctx.lineTo(e.r * 0.08, -e.r * 0.75);
+  ctx.stroke();
+  // bowed head
+  ctx.fillStyle = '#0c0a12';
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.55, e.r * 0.26, e.r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// the hymn lector — it reads the sentence out, and the sentence arrives
+function drawLector(ctx, e, t) {
+  const brewing = e.ai ? Math.max(0, 1 - e.ai.fireT / 0.7) : 0;
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, 0.1 + brewing * 0.15));
+  ctx.save();
+  ctx.rotate(Math.sin(e.wobble * 0.7) * 0.05);
+  // a tall narrow vestment
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(0, -e.r * 1.3);
+  ctx.bezierCurveTo(e.r * 0.6, -e.r * 0.95, e.r * 0.62, e.r * 0.4, e.r * 0.4, e.r * 1.05);
+  ctx.lineTo(-e.r * 0.4, e.r * 1.05);
+  ctx.bezierCurveTo(-e.r * 0.62, e.r * 0.4, -e.r * 0.6, -e.r * 0.95, 0, -e.r * 1.3);
+  ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.45); ctx.lineWidth = 1.5; ctx.stroke();
+  // the lectern-book held open before it
+  ctx.fillStyle = '#d8ccb8';
+  ctx.save();
+  ctx.translate(0, e.r * 0.15);
+  ctx.rotate(-0.08);
+  ctx.fillRect(-e.r * 0.55, -e.r * 0.18, e.r * 0.52, e.r * 0.4);
+  ctx.rotate(0.16);
+  ctx.fillRect(e.r * 0.03, -e.r * 0.18, e.r * 0.52, e.r * 0.4);
+  ctx.restore();
+  ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -e.r * 0.05); ctx.lineTo(0, e.r * 0.4); ctx.stroke();
+  // the read line glows brighter as the verse comes due
+  ctx.strokeStyle = hexA(e.def.glow, 0.3 + brewing * 0.65); ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(-e.r * 0.42, e.r * 0.12); ctx.lineTo(-e.r * 0.1, e.r * 0.12); ctx.stroke();
+  // no face — a reading light where the eyes would be
+  ctx.fillStyle = hexA(e.def.glow, 0.55 + brewing * 0.4);
+  ctx.beginPath(); ctx.arc(0, -e.r * 0.72, 2.4 + brewing * 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// the bell-sexton — it buried the bells; now it buries whatever rings
+function drawSexton(ctx, e, t) {
+  const tel = e.state === 'telegraph';
+  const lunging = e.state === 'lunging';
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, lunging ? 0.26 : 0.1));
+  const ang = e.ai?.dir ? Math.atan2(e.ai.dir.y, e.ai.dir.x) : Math.sin(e.wobble * 0.5) * 0.25;
+  const quiver = tel ? Math.sin(t * 40) * 1.6 : 0;
+  ctx.save();
+  ctx.translate(quiver, 0);
+  ctx.rotate(ang);
+  // a low, broad back built for carrying — the yoke rides its shoulders
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(e.r * 0.95, 0);
+  ctx.bezierCurveTo(e.r * 0.6, -e.r * 0.85, -e.r * 0.7, -e.r * 0.75, -e.r * 0.95, 0);
+  ctx.bezierCurveTo(-e.r * 0.7, e.r * 0.75, e.r * 0.6, e.r * 0.85, e.r * 0.95, 0);
+  ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1.8; ctx.stroke();
+  // the yoke: a beam across the shoulders with one small bell still hung
+  ctx.strokeStyle = '#1a140c'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(-e.r * 0.15, -e.r * 0.95); ctx.lineTo(-e.r * 0.15, e.r * 0.95); ctx.stroke();
+  const ring = tel || lunging;
+  const swingA = ring ? Math.sin(t * 26) * 0.5 : Math.sin(e.wobble * 1.4) * 0.18;
+  ctx.save();
+  ctx.translate(-e.r * 0.15, -e.r * 0.95);
+  ctx.rotate(swingA);
+  ctx.fillStyle = '#52402a';
+  ctx.beginPath();
+  ctx.moveTo(-4.5, 0); ctx.quadraticCurveTo(-5, -8, 0, -9); ctx.quadraticCurveTo(5, -8, 4.5, 0);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, ring ? 0.9 : 0.4); ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.restore();
+  // the spade-blade brow it leads with
+  ctx.fillStyle = hexA('#c8bca8', 0.85);
+  ctx.beginPath();
+  ctx.moveTo(e.r * 0.7, -e.r * 0.4); ctx.lineTo(e.r * 1.25, 0); ctx.lineTo(e.r * 0.7, e.r * 0.4);
+  ctx.closePath(); ctx.fill();
+  // one deep-set light
+  ctx.fillStyle = tel || lunging ? '#fff4e8' : e.def.glow;
+  ctx.beginPath(); ctx.arc(e.r * 0.45, -e.r * 0.15, 2.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// the funeral toll — a bell that buried itself upright and kept the office
+function drawToller(ctx, e, t) {
+  const brew = e.ai ? Math.max(0, 1 - e.ai.tollT / 1.1) : 0;
+  glow(ctx, 0, 0, e.r * 2.2, hexA(e.def.glow, 0.09 + brew * 0.2));
+  // rubble skirt where it drove itself into the floor
+  ctx.fillStyle = 'rgba(8,6,14,0.55)';
+  ctx.beginPath(); ctx.ellipse(0, e.r * 0.55, e.r * 1.35, e.r * 0.45, 0, 0, Math.PI * 2); ctx.fill();
+  // the bell, mouth down: shoulder, waist, flared lip
+  const rock = Math.sin(t * (brew > 0.6 ? 18 : 1.2) + e.wobble) * (brew > 0.6 ? 0.05 : 0.015);
+  ctx.save();
+  ctx.rotate(rock);
+  const gr = ctx.createLinearGradient(-e.r, 0, e.r, 0);
+  gr.addColorStop(0, '#241a2c'); gr.addColorStop(0.5, '#3a2c48'); gr.addColorStop(1, '#181022');
+  ctx.fillStyle = gr;
+  ctx.beginPath();
+  ctx.moveTo(-e.r * 0.95, e.r * 0.6);
+  ctx.quadraticCurveTo(-e.r * 0.7, e.r * 0.3, -e.r * 0.55, -e.r * 0.3);
+  ctx.quadraticCurveTo(-e.r * 0.4, -e.r * 0.95, 0, -e.r * 1.0);
+  ctx.quadraticCurveTo(e.r * 0.4, -e.r * 0.95, e.r * 0.55, -e.r * 0.3);
+  ctx.quadraticCurveTo(e.r * 0.7, e.r * 0.3, e.r * 0.95, e.r * 0.6);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1.8; ctx.stroke();
+  // the lip, and the dark under it
+  ctx.strokeStyle = hexA(e.def.glow, 0.35 + brew * 0.5); ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.moveTo(-e.r * 0.95, e.r * 0.6); ctx.quadraticCurveTo(0, e.r * 0.78, e.r * 0.95, e.r * 0.6); ctx.stroke();
+  // engraved office line around the waist
+  ctx.strokeStyle = hexA(e.def.glow, 0.3); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-e.r * 0.58, -e.r * 0.2); ctx.quadraticCurveTo(0, -e.r * 0.05, e.r * 0.58, -e.r * 0.2); ctx.stroke();
+  ctx.restore();
+  // the note gathers under the mouth before it rings
+  if (brew > 0.3) {
+    ctx.strokeStyle = hexA(e.def.glow, (brew - 0.3) * 0.8); ctx.lineWidth = 1.5;
+    const rr = 6 + (1 - brew) * 14;
+    ctx.beginPath(); ctx.ellipse(0, e.r * 0.68, rr, rr * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// the reverberant shade — a voice arriving after its singer already left
+function drawEchoer(ctx, e, t) {
+  const lag = Math.sin(e.wobble * 1.1);
+  glow(ctx, 0, 0, e.r * 2, hexA(e.def.glow, 0.1));
+  // the echo body: same figure twice, the second a half-step behind
+  for (let pass = 0; pass < 2; pass++) {
+    const off = pass === 0 ? { x: -lag * 5 - 4, y: 2 } : { x: 0, y: 0 };
+    const alpha = pass === 0 ? 0.3 : 0.9;
+    ctx.save();
+    ctx.translate(off.x, off.y);
+    ctx.globalAlpha *= alpha;
+    ctx.fillStyle = pass === 0 ? hexA(e.def.glow, 0.35) : e.def.color;
+    ctx.beginPath();
+    ctx.moveTo(0, -e.r * 1.1);
+    ctx.bezierCurveTo(e.r * 0.75, -e.r * 0.7, e.r * 0.8, e.r * 0.4, e.r * 0.4, e.r);
+    ctx.quadraticCurveTo(0, e.r * 0.8, -e.r * 0.4, e.r);
+    ctx.bezierCurveTo(-e.r * 0.8, e.r * 0.4, -e.r * 0.75, -e.r * 0.7, 0, -e.r * 1.1);
+    ctx.fill();
+    if (pass === 1) {
+      ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1.4; ctx.stroke();
+      // the mouth is the only feature it kept
+      ctx.fillStyle = '#0a0812';
+      ctx.beginPath(); ctx.ellipse(0, -e.r * 0.5, 2.6, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = hexA(e.def.glow, 0.6); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(0, -e.r * 0.5, 2.6, 3.8, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // sung-back notes trail off it toward yesterday
+  ctx.font = '10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < 2; i++) {
+    const cyc = (t * 0.8 + i * 0.5) % 1;
+    ctx.fillStyle = hexA(e.def.glow, (1 - cyc) * 0.6);
+    ctx.fillText('♪', -e.r - 4 - cyc * 14, -e.r * 0.4 + Math.sin(t * 2 + i * 3) * 5);
+  }
+}
+
+// the hollow chorus — three empty hoods sharing one robe, singing the horde
+function drawChorus(ctx, e, t) {
+  const verse = e.ai ? Math.max(0, 1 - e.ai.answerT) : 0;
+  glow(ctx, 0, 0, e.r * 2.2, hexA(e.def.glow, 0.1 + verse * 0.16));
+  const bob = Math.sin(e.wobble * 1.2) * 1.5;
+  ctx.save();
+  ctx.translate(0, bob);
+  // one broad shared robe
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(-e.r * 1.05, e.r);
+  ctx.quadraticCurveTo(-e.r * 1.1, -e.r * 0.4, -e.r * 0.55, -e.r * 0.85);
+  ctx.quadraticCurveTo(0, -e.r * 1.1, e.r * 0.55, -e.r * 0.85);
+  ctx.quadraticCurveTo(e.r * 1.1, -e.r * 0.4, e.r * 1.05, e.r);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.45); ctx.lineWidth = 1.5; ctx.stroke();
+  // three hoods, three open dark mouths — the middle leads
+  for (let i = -1; i <= 1; i++) {
+    const hx = i * e.r * 0.52;
+    const hy = -e.r * (i === 0 ? 0.72 : 0.5);
+    ctx.fillStyle = '#0a0812';
+    ctx.beginPath(); ctx.ellipse(hx, hy, e.r * 0.22, e.r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(hx, hy, e.r * 0.22, e.r * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = hexA(e.def.glow, 0.4 + verse * 0.5 + Math.sin(t * 4 + i) * 0.1);
+    ctx.beginPath(); ctx.ellipse(hx, hy + e.r * 0.06, 1.8, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+  // when the answer is due, the verse climbs visibly
+  if (verse > 0.2) {
+    ctx.fillStyle = hexA(e.def.glow, 0.7);
+    ctx.font = '10px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (let i = 0; i < 3; i++) {
+      const cyc = (t * 0.9 + i * 0.33) % 1;
+      ctx.globalAlpha = (1 - cyc) * 0.8;
+      ctx.fillText(i === 1 ? '♫' : '♪', (i - 1) * 9 + Math.sin(t * 2 + i * 2) * 5, -e.r - 6 - cyc * 16);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// the hollow maestro — it still conducts; the music is whatever you scream
+function drawMaestro(ctx, e, t) {
+  glow(ctx, 0, 0, e.r * 2.6, hexA(e.def.glow, 0.16));
+  const orbAng = e.ai?.orbAng ?? t * 2.4;
+  // two swinging censers on chains — the space near it is never safe
+  for (let i = 0; i < 2; i++) {
+    const a = orbAng + i * Math.PI;
+    const ox = Math.cos(a) * 74, oy = Math.sin(a) * 74;
+    ctx.strokeStyle = 'rgba(120,110,140,0.6)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(0, -e.r * 0.4);
+    ctx.quadraticCurveTo(ox * 0.5, oy * 0.5 - 10, ox, oy);
+    ctx.stroke();
+    glow(ctx, ox, oy, 24, hexA(e.def.glow, 0.35));
+    ctx.fillStyle = '#1a1424';
+    ctx.beginPath(); ctx.arc(ox, oy, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA(e.def.glow, 0.75); ctx.lineWidth = 1.5; ctx.stroke();
+    // vents in the censer, lit from inside
+    ctx.fillStyle = hexA(e.def.glow, 0.7 + Math.sin(t * 7 + i * 3) * 0.2);
+    for (let k = 0; k < 3; k++) {
+      const ka = t * 1.5 + k * 2.1;
+      ctx.beginPath(); ctx.arc(ox + Math.cos(ka) * 5.5, oy + Math.sin(ka) * 5.5, 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+    // pale smoke that rises off the beat
+    const wisp = (t * 0.8 + i * 0.5) % 1;
+    ctx.strokeStyle = hexA('#ded4ec', 0.4 * (1 - wisp)); ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy - 11);
+    ctx.quadraticCurveTo(ox + Math.sin(t * 3 + i) * 6, oy - 18 - wisp * 12, ox, oy - 26 - wisp * 14);
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.rotate(Math.sin(e.wobble * 0.8) * 0.04);
+  // the long conductor's coat, split tails
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(0, -e.r * 1.05);
+  ctx.bezierCurveTo(e.r * 0.8, -e.r * 0.95, e.r * 0.75, e.r * 0.1, e.r * 0.55, e.r);
+  ctx.lineTo(e.r * 0.14, e.r * 0.85); ctx.lineTo(0, e.r); ctx.lineTo(-e.r * 0.14, e.r * 0.85); ctx.lineTo(-e.r * 0.55, e.r);
+  ctx.bezierCurveTo(-e.r * 0.75, e.r * 0.1, -e.r * 0.8, -e.r * 0.95, 0, -e.r * 1.05);
+  ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.75); ctx.lineWidth = 2.5; ctx.stroke();
+  // the raised arm and baton, keeping a time nobody else survives
+  const beat = Math.sin(t * 2.2) * 0.5;
+  ctx.save();
+  ctx.translate(e.r * 0.35, -e.r * 0.55);
+  ctx.rotate(-0.7 + beat * 0.35);
+  ctx.strokeStyle = hexA(e.def.glow, 0.7); ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(e.r * 0.85, -e.r * 0.3); ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = hexA('#f4eeff', 0.85);
+  ctx.beginPath(); ctx.arc(e.r * 0.85, -e.r * 0.3, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // an empty hood, listening
+  ctx.fillStyle = '#0a0812';
+  ctx.beginPath(); ctx.ellipse(0, -e.r * 0.68, e.r * 0.28, e.r * 0.34, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.fillStyle = e.def.glow;
+  ctx.beginPath(); ctx.arc(-3, -e.r * 0.7, 1.6, 0, Math.PI * 2); ctx.arc(3, -e.r * 0.7, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// ═══ boss: The Ninefold Carillon — the belfry did not fall; it stood up ═══
+function drawCarillon(ctx, e, t) {
+  const ph2 = e.ai?.phase === 2;
+  glow(ctx, 0, 0, e.r * 3, hexA(e.def.glow, ph2 ? 0.22 : 0.13));
+  const stride = Math.sin(e.wobble * 1.6) * 0.05;
+  ctx.save();
+  ctx.rotate(stride);
+  // two great legs of scaffold timber
+  ctx.strokeStyle = '#1a1208'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  for (let i = -1; i <= 1; i += 2) {
+    const step = Math.sin(e.wobble * 1.6 + (i === 1 ? Math.PI : 0)) * e.r * 0.14;
+    ctx.beginPath();
+    ctx.moveTo(i * e.r * 0.5, e.r * 0.2);
+    ctx.lineTo(i * e.r * 0.75 + step, e.r * 1.15);
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+  // the frame: a dark arch with a gabled cap
+  ctx.fillStyle = e.def.color;
+  ctx.beginPath();
+  ctx.moveTo(-e.r * 0.95, e.r * 0.35);
+  ctx.lineTo(-e.r * 0.8, -e.r * 0.75);
+  ctx.lineTo(0, -e.r * 1.15);
+  ctx.lineTo(e.r * 0.8, -e.r * 0.75);
+  ctx.lineTo(e.r * 0.95, e.r * 0.35);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.55); ctx.lineWidth = 2.5; ctx.stroke();
+  // the arch it rings through
+  ctx.fillStyle = '#0a0710';
+  ctx.beginPath();
+  ctx.moveTo(-e.r * 0.62, e.r * 0.3);
+  ctx.lineTo(-e.r * 0.55, -e.r * 0.5);
+  ctx.quadraticCurveTo(0, -e.r * 0.85, e.r * 0.55, -e.r * 0.5);
+  ctx.lineTo(e.r * 0.62, e.r * 0.3);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = hexA(e.def.glow, 0.35); ctx.lineWidth = 1.5; ctx.stroke();
+  // three bells in the arch — the visible ninth of the nine
+  for (let i = -1; i <= 1; i++) {
+    const swing = Math.sin(t * (ph2 ? 6 : 2.6) + i * 1.4) * (ph2 ? 0.4 : 0.2);
+    ctx.save();
+    ctx.translate(i * e.r * 0.34, -e.r * (i === 0 ? 0.62 : 0.5));
+    ctx.rotate(swing);
+    const br = e.r * (i === 0 ? 0.2 : 0.15);
+    const bgr = ctx.createLinearGradient(-br, 0, br, 0);
+    bgr.addColorStop(0, '#3a2c1c'); bgr.addColorStop(0.5, '#5c4426'); bgr.addColorStop(1, '#241a10');
+    ctx.fillStyle = bgr;
+    ctx.beginPath();
+    ctx.moveTo(-br, br * 1.5);
+    ctx.quadraticCurveTo(-br * 1.05, -br * 0.6, 0, -br * 0.9);
+    ctx.quadraticCurveTo(br * 1.05, -br * 0.6, br, br * 1.5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = hexA(e.def.glow, 0.6); ctx.lineWidth = 1.4; ctx.stroke();
+    ctx.fillStyle = hexA(e.def.glow, 0.8);
+    ctx.beginPath(); ctx.arc(Math.sin(swing * 2) * br * 0.5, br * 1.4, br * 0.22, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // the rung note leaves the arch in rings
+  for (let i = 0; i < (ph2 ? 3 : 2); i++) {
+    const cyc = (t * 0.7 + i / 2) % 1;
+    ctx.strokeStyle = hexA(e.def.glow, 0.35 * (1 - cyc)); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(0, -e.r * 0.3, e.r * 0.4 + cyc * e.r * 1.2, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ═══ boss: The Antiphon — call and answer; you are the call ═══
+function drawAntiphon(ctx, e, t) {
+  const ph2 = e.ai?.phase === 2;
+  const tel = e.state === 'telegraph';
+  const lunging = e.state === 'lunging';
+  glow(ctx, 0, 0, e.r * 2.8, hexA(e.def.glow, ph2 ? 0.24 : 0.14));
+  if (tel && e.ai?.dir) {
+    ctx.strokeStyle = hexA(e.def.glow, 0.5); ctx.lineWidth = 3; ctx.setLineDash([8, 7]);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(e.ai.dir.x * 220, e.ai.dir.y * 220); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const quiver = tel ? Math.sin(t * 44) * 1.6 : 0;
+  ctx.save();
+  ctx.translate(quiver, 0);
+  ctx.rotate(Math.sin(e.wobble * 0.7) * 0.05);
+  // the answering half arrives a beat late, mirrored
+  const lagX = Math.sin(e.wobble * 1.3) * 6 + 7;
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.translate(lagX, 2);
+  ctx.globalAlpha *= lunging ? 0.55 : 0.35;
+  drawAntiphonHalf(ctx, e, hexA(e.def.glow, 0.4), true);
+  ctx.restore();
+  // the calling half, solid
+  drawAntiphonHalf(ctx, e, e.def.color, false);
+  // the shared face: one bright line splitting call from answer
+  ctx.strokeStyle = hexA('#f4eeff', 0.65 + Math.sin(t * 4) * 0.15); ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(0, -e.r * 1.2); ctx.lineTo(0, e.r * 0.9); ctx.stroke();
+  ctx.restore();
+  // paired notes leave it in opposite directions — the call and its answer
+  ctx.font = '11px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < 2; i++) {
+    const cyc = (t * 1.1 + i * 0.5) % 1;
+    ctx.fillStyle = hexA(e.def.glow, (1 - cyc) * 0.7);
+    const d = 10 + cyc * 22;
+    ctx.fillText('♪', d, -e.r * 0.5 - cyc * 8);
+    ctx.fillText('♪', -d, -e.r * 0.5 + cyc * 8);
+  }
+}
+
+function drawAntiphonHalf(ctx, e, fill, isEcho) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(0, -e.r * 1.2);
+  ctx.bezierCurveTo(e.r * 0.8, -e.r * 0.85, e.r * 0.9, e.r * 0.2, e.r * 0.45, e.r * 0.95);
+  ctx.quadraticCurveTo(0, e.r * 0.75, -e.r * 0.45, e.r * 0.95);
+  ctx.bezierCurveTo(-e.r * 0.9, e.r * 0.2, -e.r * 0.8, -e.r * 0.85, 0, -e.r * 1.2);
+  ctx.fill();
+  if (!isEcho) {
+    ctx.strokeStyle = hexA(e.def.glow, 0.55); ctx.lineWidth = 1.8; ctx.stroke();
+    // vestment folds catch what light there is
+    ctx.strokeStyle = hexA(e.def.glow, 0.22); ctx.lineWidth = 1.2;
+    for (let i = -1; i <= 1; i += 2) {
+      ctx.beginPath();
+      ctx.moveTo(i * e.r * 0.3, -e.r * 0.75);
+      ctx.quadraticCurveTo(i * e.r * 0.52, 0, i * e.r * 0.32, e.r * 0.8);
+      ctx.stroke();
+    }
+    // the open mouth, mid-verse always
+    ctx.fillStyle = '#0a0812';
+    ctx.beginPath(); ctx.ellipse(e.r * 0.16, -e.r * 0.6, 2.6, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA(e.def.glow, 0.6); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(e.r * 0.16, -e.r * 0.6, 2.6, 4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+// ═══ boss: The Grand Silence — the hole the song left ═══
+function drawSilence(ctx, e, t) {
+  const ph2 = e.ai?.phase === 2;
+  // it does not glow — it unglows: a rim of light around a place with none
+  ctx.save();
+  // swallowed notes spiral INTO it
+  ctx.font = '12px Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 0; i < (ph2 ? 6 : 4); i++) {
+    const cyc = (t * 0.5 + i / 4) % 1;
+    const a = i * 2.4 + t * 0.7 + cyc * 2.2;
+    const d = e.r * (2.4 - cyc * 1.6);
+    ctx.fillStyle = hexA(e.def.glow, cyc * 0.55);
+    ctx.fillText(i % 2 ? '♪' : '♫', Math.cos(a) * d, Math.sin(a) * d);
+  }
+  // the dark disc, darker than the floor has any right to be
+  const grad = ctx.createRadialGradient(0, 0, e.r * 0.1, 0, 0, e.r * 1.15);
+  grad.addColorStop(0, '#000000');
+  grad.addColorStop(0.75, e.def.color);
+  grad.addColorStop(1, 'rgba(16,12,28,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, e.r * 1.15, 0, Math.PI * 2); ctx.fill();
+  // the rim: thin, bright, uneasy
+  const waver = 0.5 + Math.sin(t * (ph2 ? 5 : 2.4)) * 0.2;
+  ctx.strokeStyle = hexA(e.def.glow, waver); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, e.r, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = hexA('#f4eeff', 0.25 * waver); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(0, 0, e.r * 0.9 + Math.sin(t * 3.2) * 2, 0, Math.PI * 2); ctx.stroke();
+  // inside: the negative of a congregation — rows of darker-than-dark hoods
+  ctx.fillStyle = 'rgba(180,140,255,0.10)';
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + t * 0.15;
+    const d = e.r * 0.55;
+    ctx.beginPath(); ctx.ellipse(Math.cos(a) * d, Math.sin(a) * d, 4.5, 6, a, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 // a hooded binder silhouette — used for the dueling rival (world-entity version)

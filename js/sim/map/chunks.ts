@@ -26,7 +26,8 @@ export function worldTheme(game: WorldState): WorldTheme {
 
 // Prop density and scale per visual theme: the ember wastes crowd the floor
 // with shard clusters and narrow lava fissures, the drowned courts spread out
-// around broad flood pools and fallen columns.
+// around broad flood pools and fallen columns, the hollow choir leaves long
+// empty aisles between fallen bells and pools of swallowed sound.
 interface ThemeGen {
   pillarSkip: number;
   pillarMax: number;
@@ -38,6 +39,7 @@ const THEME_GEN: Record<WorldTheme, ThemeGen> = {
   arcane: { pillarSkip: 0.55, pillarMax: 2, pillarR: [26, 20], poolChance: 0.22, poolR: [70, 50] },
   ember: { pillarSkip: 0.4, pillarMax: 3, pillarR: [22, 16], poolChance: 0.3, poolR: [52, 38] },
   abyss: { pillarSkip: 0.6, pillarMax: 2, pillarR: [30, 22], poolChance: 0.3, poolR: [90, 70] },
+  requiem: { pillarSkip: 0.5, pillarMax: 2, pillarR: [26, 18], poolChance: 0.26, poolR: [64, 48] },
 };
 
 export function biomeOf(

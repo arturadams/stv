@@ -436,6 +436,9 @@ export type BehaviorId =
   | 'urchin'
   | 'undertow'
   | 'mender'
+  | 'toller'
+  | 'echoer'
+  | 'chorus'
   | 'boss'
   | 'boss_leviathan'
   | 'boss_king'
@@ -445,6 +448,9 @@ export type BehaviorId =
   | 'boss_queen'
   | 'boss_regent'
   | 'boss_reliquary'
+  | 'boss_carillon'
+  | 'boss_antiphon'
+  | 'boss_silence'
   | 'rival';
 
 export type ClassId = 'mage' | 'warrior' | 'rogue';
@@ -529,7 +535,12 @@ export interface EnemyDef {
   deathBurst?: ExplosionSpec;
   deathSpawn?: { id: string; count: number };
   // exploders that leave the floor poisoned where they pop (brine motes)
-  boomHazard?: { r: number; dmg: number; dur: number };
+  boomHazard?: { r: number; dmg: number; dur: number; kind?: HazardKind };
+  // the echo: strikes that land where the player stood a beat ago (shades)
+  echoEvery?: number;
+  echoDelay?: number;
+  echoR?: number;
+  echoDmg?: number;
   // the tide: currents that drag the player (sirens, undertow maws)
   pullEvery?: number;
   pullR?: number;
@@ -660,9 +671,13 @@ export interface ClassDef {
 export type Rgb = readonly [red: number, green: number, blue: number];
 
 // Each world paints with a different brush: arcane = candle-lit archive stone,
-// ember = cracked basalt and lava light, abyss = drowned marble and cold glow.
+// ember = cracked basalt and lava light, abyss = drowned marble and cold glow,
+// requiem = bone-pale basilica dust and violet votive light.
 // The theme drives prop generation (map/chunks.ts) and rendering (render.js).
-export type WorldTheme = 'arcane' | 'ember' | 'abyss';
+export type WorldTheme = 'arcane' | 'ember' | 'abyss' | 'requiem';
+
+// what a patch of weaponized floor is made of — drives drawHazard (render.js)
+export type HazardKind = 'ember' | 'ink' | 'brine' | 'toll';
 
 export interface BiomeDef {
   id: string;
