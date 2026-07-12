@@ -51,16 +51,18 @@ scales with run time and distance from the origin.
 
 ## Worlds (five realms, increasingly cruel)
 
-Beating any boss gate opens a **portal to the next world**. Each world has
-its own background/biomes, its own enemy roster with harder mechanics, its
-own boss, and **its own card set per class + Colorless that only becomes
-obtainable there** (and is favored in that world's drafts).
+Beating **all three boss gates** of a world opens a **timed portal to the
+next world** — it counts down (paused during fights), collapses if missed,
+and re-manifests near the player so a run is never softlocked. Each world
+has its own background/biomes, its own enemy roster with harder mechanics,
+its own bosses, and **its own card set per class + Colorless that only
+becomes obtainable there** (and is favored in that world's drafts).
 
 | World | Name | Status |
 |---|---|---|
 | I  | The Sunken Realm | ✅ full — wisps/sentinels/horrors/knights, The Gilded Librarian |
 | II | The Ember Wastes | ✅ full — Ember Imps (death-burst), Magma Maws (telegraphed artillery), Ash Stalkers (phase-shift ambush), Cinder Knights (chained lunges), Pyre Custodians (summoner elites); boss: The Cinder Sovereign; 16 new cards (4 per school) |
-| III | The Drowned Courts | 🔲 declared — reuses World II sets at higher threat until authored |
+| III | The Drowned Courts | ✅ full — a drowned aristocracy in pale marble and teal; the tide as a mechanic: Court Sirens (song-pull), Undertow Maws (vortex pits), Brine Motes (death-burst pools), Reef Urchins (rotating spine volleys), Tide Lancers (chained thrusts), Grief Choristers (healers), Tidebound Seneschals (elites); bosses: The Sunless Queen (ballroom-figure patterns), The Undertow Regent (tidewalls with one gap), The Weeping Reliquary (open/sealed shell cycle); brine ground hazards, marine-snow ambience, 16 new cards (4 per school, chill/tide themed) |
 | IV | The Hollow Choir | 🔲 declared |
 | V  | The Last Arcanum | 🔲 declared |
 

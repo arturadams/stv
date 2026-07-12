@@ -9,33 +9,26 @@
 // short gap follows every resolve so the queue visibly accumulates.
 
 import { CARDS, ELEMENT_COLORS, SCHOOL_COLORS } from './data.js';
+import { EVT } from './core/events.js';
+import { makeUidCounter } from './core/ids.js';
+import { makeRng } from './core/rng.js';
+import { runQueueOp } from './engine/queueOps.js';
 
-export class EventBus {
-  constructor() { this.map = new Map(); }
-  on(name, fn) {
-    if (!this.map.has(name)) this.map.set(name, []);
-    this.map.get(name).push(fn);
-  }
-  emit(name, payload = {}) {
-    const fns = this.map.get(name);
-    if (fns) for (const fn of fns.slice()) fn(payload);
-  }
-}
-
-let UID = 1;
 // Cards carry a level: duplicates combined at a Sanctuary grow stronger.
-export function makeCard(id, lvl = 0) {
+export function makeCard(id, lvl = 0, uid = 0) {
   const def = CARDS[id];
   if (!def) throw new Error('unknown card: ' + id);
-  return { uid: UID++, def, cost: def.cost, lvl };
+  return { uid, def, cost: def.cost, lvl };
 }
 
-const ENCHANT_EVENTS = ['statusApplied', 'enemyKilled', 'perfectDodge', 'queueEmpty',
-  'playerHit', 'cardResolved', 'powerExpired', 'trapTriggered'];
+const ENCHANT_EVENTS = [EVT.statusApplied, EVT.enemyKilled, EVT.perfectDodge, EVT.queueEmpty,
+  EVT.playerHit, EVT.cardResolved, EVT.powerExpired, EVT.trapTriggered];
 
 export class CardEngine {
-  constructor(bus) {
+  constructor(bus, rng = makeRng(Date.now())) {
     this.bus = bus;
+    this.rng = rng;
+    this.cardIds = makeUidCounter();
     this.deck = []; this.discard = []; this.queue = [];
     this.channel = null;           // {inst, t, dur, buffs, cost, preview}
     this.flow = 4; this.maxFlow = 10;
@@ -59,12 +52,17 @@ export class CardEngine {
     this.computePreview = null;    // (def, buffs) => preview | null
     this.runEnchantAction = null;  // (doSpec, payload, ench) => void
     this.classChannelMult = null;  // (def) => mult — Rage / Opportunity hook
+    this.followPos = null;         // {x, y} — set every frame so self-centered previews can follow the player
     const dispatch = (ev) => (p) => this.dispatchEnchants(ev, p);
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }
 
+  makeCard(id, lvl = 0) {
+    return makeCard(id, lvl, this.cardIds.next());
+  }
+
   setDeck(entries) {
-    this.deck = entries.map(e => typeof e === 'string' ? makeCard(e) : makeCard(e.id, e.lvl || 0));
+    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl || 0));
     this.shuffleArray(this.deck);
     this.discard = []; this.queue = []; this.channel = null;
     this.powers = []; this.flushMode = null; this.gapT = 0;
@@ -73,7 +71,7 @@ export class CardEngine {
 
   shuffleArray(a) {
     for (let i = a.length - 1; i > 0; i--) {
-      const j = (Math.random() * (i + 1)) | 0;
+      const j = this.rng.int(i + 1);
       [a[i], a[j]] = [a[j], a[i]];
     }
   }
@@ -82,7 +80,7 @@ export class CardEngine {
     if (amount <= 0) return;
     const before = this.flow;
     this.flow = Math.min(this.maxFlow, this.flow + amount);
-    if (this.flow > before) this.bus.emit('flowGained', { amount: this.flow - before, source });
+    if (this.flow > before) this.bus.emit(EVT.flowGained, { amount: this.flow - before, source });
   }
 
   drawCard(reason = 'auto') {
@@ -91,12 +89,12 @@ export class CardEngine {
       if (this.discard.length === 0) return false;
       this.deck = this.discard; this.discard = [];
       this.shuffleArray(this.deck);
-      this.bus.emit('deckShuffled', {});
+      this.bus.emit(EVT.deckShuffled, {});
     }
     const inst = this.deck.pop();
     this.queue.push(inst);
     this.uiDirty = true;
-    this.bus.emit('cardDrawn', { inst, reason });
+    this.bus.emit(EVT.cardDrawn, { inst, reason });
     return true;
   }
 
@@ -149,7 +147,7 @@ export class CardEngine {
     const preview = this.computePreview ? this.computePreview(def, buffs) : null;
     this.channel = { inst, t: 0, dur, buffs, cost, preview };
     this.uiDirty = true;
-    this.bus.emit('channelStart', { inst, dur, cost });
+    this.bus.emit(EVT.channelStart, { inst, dur, cost });
     return true;
   }
 
@@ -187,9 +185,9 @@ export class CardEngine {
     this.combo = this.comboTimer > 0 ? this.combo + 1 : 1;
     this.comboTimer = 4;
     if (this.combo > 1 && this.combo % 5 === 0) this.gainFlow(2, 'combo');
-    this.bus.emit('comboChanged', { combo: this.combo });
-    this.bus.emit('cardResolved', { inst, buffs });
-    if (this.queue.length === 0 && !this.channel) this.bus.emit('queueEmpty', {});
+    this.bus.emit(EVT.comboChanged, { combo: this.combo });
+    this.bus.emit(EVT.cardResolved, { inst, buffs });
+    if (this.queue.length === 0 && !this.channel) this.bus.emit(EVT.queueEmpty, {});
   }
 
   // ── Powers: cards that stay active, modifying the basic attack ──
@@ -203,7 +201,7 @@ export class CardEngine {
       color: ELEMENT_COLORS[def.element] || SCHOOL_COLORS[def.school],
       school: def.school, timeLeft: dur, dur, spec: eff.power || {},
     });
-    this.bus.emit('powerGained', { id: def.id, school: def.school });
+    this.bus.emit(EVT.powerGained, { id: def.id, school: def.school });
     this.uiDirty = true;
   }
 
@@ -234,42 +232,7 @@ export class CardEngine {
   }
 
   queueOp(op, params = {}) {
-    switch (op) {
-      case 'duplicateNext': {
-        const next = this.queue[0];
-        if (next) this.queue.splice(1, 0, { uid: UID++, def: next.def, cost: next.cost + 1, lvl: next.lvl || 0, copy: true });
-        break;
-      }
-      case 'reverse': this.queue.reverse(); break;
-      case 'flush':
-        // Fast-forward, not teleport: queued cards still channel (at 3× speed)
-        // and still pay Flow — channel rules and readability are preserved.
-        if (this.queue.length > 0)
-          this.flushMode = { charges: this.queue.length, costMult: params.costMult ?? 1 };
-        break;
-      case 'echoLast': {
-        if (this.lastResolvedId) {
-          const inst = makeCard(this.lastResolvedId, this.lastResolvedLvl || 0);
-          inst.cost += 1;
-          this.queue.push(inst);
-          this.bus.emit('cardQueued', { inst });
-        }
-        break;
-      }
-      case 'shuffleAll':
-        this.deck.push(...this.discard); this.discard = [];
-        this.shuffleArray(this.deck);
-        this.bus.emit('deckShuffled', {});
-        break;
-      case 'purge': {
-        let refund = 0;
-        for (const inst of this.queue) refund += inst.cost;
-        this.discard.push(...this.queue); this.queue = [];
-        this.gainFlow(Math.floor(refund / 2), 'purge');
-        this.bus.emit('queueEmpty', {});
-        break;
-      }
-    }
+    runQueueOp(this, op, params);
     this.uiDirty = true;
   }
 
@@ -298,14 +261,14 @@ export class CardEngine {
         if (e.filter.hasStatus && !(payload.enemy && payload.enemy.statuses[e.filter.hasStatus])) continue;
         if (e.filter.school && payload.school !== e.filter.school) continue;
       }
-      if (e.chance < 1 && Math.random() > e.chance) continue;
+      if (e.chance < 1 && !this.rng.chance(e.chance)) continue;
       if (this.runEnchantAction) this.runEnchantAction(e.do, payload, e);
     }
   }
 
   update(dt) {
     // timers
-    if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.combo = 0; this.bus.emit('comboChanged', { combo: 0 }); } }
+    if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) { this.combo = 0; this.bus.emit(EVT.comboChanged, { combo: 0 }); } }
     if (this.hasteTimer > 0) { this.hasteTimer -= dt; if (this.hasteTimer <= 0) this.hasteMult = 1; }
     if (this.gapT > 0) this.gapT -= dt;
     for (const j of this.flowJobs) {
@@ -319,7 +282,7 @@ export class CardEngine {
     let powerExpired = false;
     for (const pw of this.powers) {
       pw.timeLeft -= dt;
-      if (pw.timeLeft <= 0) { powerExpired = true; this.bus.emit('powerExpired', { id: pw.id, school: pw.school }); }
+      if (pw.timeLeft <= 0) { powerExpired = true; this.bus.emit(EVT.powerExpired, { id: pw.id, school: pw.school }); }
     }
     if (powerExpired) { this.powers = this.powers.filter(pw => pw.timeLeft > 0); this.uiDirty = true; }
 

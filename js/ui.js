@@ -42,6 +42,8 @@ export function initUI(game) {
     overlaySetup: $('setup-overlay'), setupClass: $('setup-class'),
     worldRow: $('world-row'), startCards: $('start-cards'),
     tooltip: $('tooltip'), stolen: $('stolen-note'),
+    portrait: $('portrait-plate'), portraitGlyph: $('portrait-glyph'), portraitWorld: $('portrait-world'),
+    clock: $('run-clock'),
   };
 
   buildClassSelect(game);
@@ -181,6 +183,22 @@ function attachTooltip(el, def) {
     els.tooltip.style.left = x + 'px'; els.tooltip.style.top = y + 'px';
   });
   el.addEventListener('mouseleave', () => els.tooltip.classList.add('hidden'));
+
+  // touch: tap the card to inspect it, tap anywhere else to dismiss
+  el.addEventListener('click', () => {
+    if (!document.body.classList.contains('touch-mode')) return;
+    els.tooltip.innerHTML = tooltipHTML(def);
+    els.tooltip.classList.remove('hidden');
+    const r = el.getBoundingClientRect();
+    let x = r.left + r.width / 2 - els.tooltip.offsetWidth / 2;
+    x = Math.max(8, Math.min(x, window.innerWidth - els.tooltip.offsetWidth - 8));
+    let y = r.top - els.tooltip.offsetHeight - 10;
+    if (y < 8) y = Math.min(r.bottom + 10, window.innerHeight - els.tooltip.offsetHeight - 8);
+    els.tooltip.style.left = x + 'px'; els.tooltip.style.top = y + 'px';
+    document.addEventListener('pointerdown', (ev) => {
+      if (!el.contains(ev.target)) els.tooltip.classList.add('hidden');
+    }, { once: true, capture: true });
+  });
 }
 
 // ── per-frame update ──
@@ -196,8 +214,19 @@ export function updateUI(game) {
   els.flowText.textContent = `${Math.floor(eng.flow)} / ${eng.maxFlow}`;
   els.flowBar.classList.toggle('flow-full', eng.flow >= eng.maxFlow);
 
+  // portrait plate: class glyph + world badge, plus the run clock
+  const cls = CLASSES[game.playerClass];
+  if (els.portrait.dataset.cls !== (game.playerClass || '')) {
+    els.portrait.dataset.cls = game.playerClass || '';
+    els.portraitGlyph.textContent = cls ? cls.glyph : '✦';
+    els.portrait.style.setProperty('--c', cls ? cls.color : '#5c6672');
+  }
+  els.portraitWorld.textContent = game.state === 'title' ? '' : game.world;
+  const rt = Math.floor(game.runTime || 0);
+  els.clock.textContent = `${Math.floor(rt / 60)}:${String(rt % 60).padStart(2, '0')}`;
+
   // class resource (Rage / Opportunity)
-  const res = (CLASSES[game.playerClass] || {}).resource;
+  const res = (cls || {}).resource;
   if (res && game.state !== 'title') {
     els.resWrap.classList.remove('hidden');
     els.resLabel.textContent = res.name;
@@ -402,12 +431,18 @@ setInterval(() => {
 
 function rebuildRelics(game) {
   els.relics.innerHTML = '';
-  for (const r of game.relics) {
+  const slots = Math.max(6, Math.ceil(game.relics.length / 3) * 3); // inventory grid, 3 per row
+  for (let i = 0; i < slots; i++) {
+    const r = game.relics[i];
     const el = document.createElement('div');
-    el.className = 'relic';
-    el.style.setProperty('--c', r.color);
-    el.textContent = r.glyph;
-    el.title = `${r.name} — ${r.text}`;
+    if (r) {
+      el.className = 'relic';
+      el.style.setProperty('--c', r.color);
+      el.textContent = r.glyph;
+      el.title = `${r.name} — ${r.text}`;
+    } else {
+      el.className = 'relic empty';
+    }
     els.relics.appendChild(el);
   }
 }

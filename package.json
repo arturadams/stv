@@ -4,6 +4,21 @@
   "description": "A real-time deckbuilding action roguelite prototype. Your deck is alive; your cards become reality.",
   "type": "module",
   "scripts": {
-    "start": "python3 -m http.server 8123"
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "typecheck:sim": "tsc -p tsconfig.sim.json --noEmit",
+    "lint": "eslint js test",
+    "check": "npm run typecheck && npm run typecheck:sim && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "eslint": "^10.6.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vite": "^8.1.3",
+    "vitest": "^4.1.10"
   }
 }
