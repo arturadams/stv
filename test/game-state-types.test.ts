@@ -15,7 +15,7 @@ import type {
 } from '../js/sim/types.js';
 
 const card = {
-  id: 'fixture', name: 'Fixture', school: 'Mage', cat: 'Spell', rarity: 'Common',
+  id: 'fixture', name: 'Fixture', school: 'Mage', cat: 'Signature', rarity: 'Common',
   cost: 1, channel: 0.5, targeting: 'nearest', tags: [], glyph: '*',
   element: 'arcane', text: 'Fixture', effects: [],
 } satisfies CardDef;

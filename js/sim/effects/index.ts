@@ -51,7 +51,7 @@ export function resolveCard(game: GameState, inst: CardInstance, buffs: Buffs, p
   if (game.hasDuelist && def.school === 'Warrior' && game.engine.queue.length <= 1) dmgMult *= 1.6;
   const radMult = (buffs.radiusMult || 1) * game.relicRadiusMult * (1 + 0.08 * lvl);
   let critBonus = buffs.critChance || 0;
-  if (game.playerClass === 'rogue') critBonus += game.opportunity * 0.03;
+  if (game.playerClass === 'rogue') critBonus += game.engine.flow * 0.024;
   const ctx: EffectCtx = { def, buffs: { ...buffs, critChance: critBonus }, dmgMult, radMult, preview, lvl };
   for (const eff of def.effects) resolveEffect(game, eff, ctx);
   game.fx.push({ kind: 'cast', x: p.x, y: p.y, color: colorOf(def), t: 0, life: 0.35 });

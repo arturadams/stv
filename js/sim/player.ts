@@ -1,44 +1,29 @@
 import { CLASSES } from '../data/index.js';
-import type { CardDef } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { distToSegment } from '../core/math.js';
 import { sfx } from '../audio.js';
-import { applyStatus, hitEnemy, nearestEnemy, targetable } from './combat.js';
-import type { FxState } from './fx.js';
+import { applyStatus, hitEnemy, isActiveCombat, nearestEnemy, targetable } from './combat.js';
 import { floater, shake, spark } from './fx.js';
 import { chunksNear, clampToRegion } from './map/chunks.js';
 import type { DashOverride, GameState, Input } from './types.js';
 
-type ResourceState = Pick<GameState, 'playerClass' | 'rage' | 'rageDecayT'>;
-type OpportunityState = Pick<GameState, 'playerClass' | 'opportunity' | 'player'> & FxState;
-type ChannelMultState = Pick<GameState, 'playerClass' | 'rage' | 'opportunity' | 'player'> & FxState;
-
 // ═══ class resources ═══
-export function gainRage(game: ResourceState, n: number): void {
-  if (game.playerClass !== 'warrior') return;
-  game.rage = Math.min(100, game.rage + n);
-  game.rageDecayT = 2.5;
-}
-
-export function gainOpportunity(game: OpportunityState, n: number): void {
-  if (game.playerClass !== 'rogue') return;
-  const before = game.opportunity;
-  game.opportunity = Math.min(CLASSES.rogue.resource.max, game.opportunity + n);
-  if (game.opportunity > before) {
-    floater(game, game.player.x, game.player.y - 34, 'OPPORTUNITY', '#8ade6a', 11);
+// The single per-class resource (Mana/Rage/Focus) lives on `game.engine`
+// (flow/maxFlow) — see Card System v2 (rework_cards.md) §6-9. This just
+// ticks passive regen while in active combat and cools down the per-class
+// gain cooldowns tracked in `game.resourceMeters` (see combat.ts's gain
+// call sites: armor block, damage taken, critical hit).
+export function tickResourceRegen(game: GameState, dt: number): void {
+  const rm = game.resourceMeters;
+  if (rm.armorBlockCd > 0) rm.armorBlockCd -= dt;
+  if (rm.damageTakenCd > 0) rm.damageTakenCd -= dt;
+  if (rm.critCd > 0) rm.critCd -= dt;
+  if (!isActiveCombat(game)) return;
+  rm.regenT -= dt;
+  if (rm.regenT <= 0) {
+    rm.regenT = CLASSES[game.playerClass].resource.regenInterval;
+    game.engine.gainFlow(1, 'passive_combat');
   }
-}
-
-export function classChannelMult(game: ChannelMultState, def: CardDef): number {
-  if (game.playerClass === 'warrior' && def.school === 'Warrior' && game.rage > 0) {
-    return 1 / (1 + (game.rage / 100) * 0.8); // up to 80% faster at full Rage
-  }
-  if (game.playerClass === 'rogue' && def.school === 'Rogue' && game.opportunity > 0) {
-    game.opportunity -= 1; // spend a stack to quicken the card
-    floater(game, game.player.x, game.player.y - 30, 'QUICKENED', '#8ade6a', 12);
-    return 0.6;
-  }
-  return 1;
 }
 
 // ═══ movement, dash, and the card-granted dash override ═══

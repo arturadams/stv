@@ -2,7 +2,6 @@ import { EVT } from '../../core/events.js';
 import { sfx } from '../../audio.js';
 import { chainFrom, damagePlayer, enemiesIn, hitEnemy, targetable } from '../combat.js';
 import { shake, spark } from '../fx.js';
-import { gainRage } from '../player.js';
 import type { GameState } from '../types.js';
 
 export function updateProjectiles(game: GameState, dt: number): void {
@@ -48,7 +47,15 @@ export function updateProjectiles(game: GameState, dt: number): void {
       }
       hitEnemy(game, e, pr.dmg, pr.ctx, pr.eff);
       spark(game, pr.x, pr.y, pr.color, 5, 120, 0.35);
-      if (pr.ctx.basic) gainRage(game, 2);
+      // §7.2: every 4th landed Arcane Bolt grants +1 Mana — the fix for the
+      // Mage never gaining anything from a missed/hit basic attack.
+      if (pr.ctx.basic && game.playerClass === 'mage') {
+        game.resourceMeters.hitCount += 1;
+        if (game.resourceMeters.hitCount >= 4) {
+          game.resourceMeters.hitCount -= 4;
+          game.engine.gainFlow(1, 'basic_hit');
+        }
+      }
       if (pr.eff.chainOnHit && !e.dead) chainFrom(game, e, pr.eff.chainOnHit, pr.ctx, pr.x, pr.y);
       if (pr.eff.explode) {
         const ex = pr.eff.explode;

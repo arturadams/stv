@@ -7,10 +7,14 @@ import { SCHOOL_COLORS, ELEMENT_COLORS, RARITY_COLORS, CLASSES, CARDS, WORLDS } 
 import {
   startRun, applyReward, resolveEncounterChoice, colorOf, prepareRun,
   buyCard, sellCard, combineCards, leaveSanctuary, sellPrice, CARD_PRICES, MAX_CARD_LVL,
+  canAcquireCard,
 } from './world.js';
 import { initAudio, sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
+// Card System v2 (rework_cards.md) §10.3/§20: the HUD shows only the
+// current card (the ACTIVE slot) plus this many upcoming cards.
+const VISIBLE_QUEUE_SLOTS = 2;
 let els = {};
 let knownQueueUids = new Set();
 let selectedClass = 'mage';
@@ -21,12 +25,10 @@ let powersSig = '';
 export function initUI(game) {
   els = {
     hpFill: $('hp-fill'), hpText: $('hp-text'), armor: $('armor-chip'),
-    flowFill: $('flow-fill'), flowText: $('flow-text'), flowBar: $('flow-bar'),
     resWrap: $('res-wrap'), resLabel: $('res-label'), resFill: $('res-fill'), resText: $('res-text'),
     powers: $('powers'),
     combo: $('combo'), encounter: $('encounter-label'),
     relics: $('relics'), chips: $('chips'),
-    deckCount: $('deck-count'), discardCount: $('discard-count'),
     queueRow: $('queue-row'), channelSlot: $('channel-slot'), activeName: $('active-name'),
     cardPop: $('card-pop'),
     banner: $('banner'), bannerTitle: $('banner-title'), bannerSub: $('banner-sub'),
@@ -54,11 +56,6 @@ export function initUI(game) {
     pendingRun = prepareRun(game, selectedClass, 1);
     buildSetup(game);
     els.overlaySetup.classList.remove('hidden');
-  });
-  $('reroll-btn').addEventListener('click', () => {
-    sfx('draw');
-    pendingRun = prepareRun(game, pendingRun.classId, pendingRun.world);
-    buildSetup(game);
   });
   $('enter-btn').addEventListener('click', () => {
     els.overlaySetup.classList.add('hidden');
@@ -108,7 +105,7 @@ function buildClassSelect(game) {
   }
 }
 
-// ── run setup: the rolled hand + world selection ──
+// ── run setup: fixed starting deck + world selection ──
 function buildSetup(game) {
   const cls = CLASSES[pendingRun.classId];
   els.setupClass.innerHTML = `<span style="color:${cls.color}">${cls.glyph} ${cls.name}</span>`;
@@ -120,7 +117,7 @@ function buildSetup(game) {
     btn.innerHTML = `<span class="wb-sub">${w.sub}</span><span class="wb-name">${w.name}</span>`;
     btn.addEventListener('click', () => {
       sfx('engine');
-      pendingRun = prepareRun(game, pendingRun.classId, w.num); // reroll for the new world's pool
+      pendingRun = prepareRun(game, pendingRun.classId, w.num); // the starting deck is fixed; only the world changes
       buildSetup(game);
     });
     els.worldRow.appendChild(btn);
@@ -162,10 +159,14 @@ export function buildCardEl(def, size, lvl = 0) {
   return el;
 }
 
+// which class resource a card's cost is paid in — Card System v2 §6
+const RESOURCE_LABEL = { Mage: 'MANA', Warrior: 'RAGE', Rogue: 'FOCUS', Colorless: 'COST' };
+
 function tooltipHTML(def) {
   const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;
+  const resLabel = RESOURCE_LABEL[def.school] || 'COST';
   return `<div class="tt-name" style="color:${SCHOOL_COLORS[def.school]}">${def.glyph} ${def.name}</div>
-    <div class="tt-type">${def.school} · ${catLabel} · ${def.rarity} · Flow ${def.cost} · Channel ${def.channel}s${def.dur ? ' · Active ' + def.dur + 's' : ''}</div>
+    <div class="tt-type">${def.school} · ${catLabel} · ${def.rarity} · ${resLabel} ${def.cost} · Channel ${def.channel}s${def.dur ? ' · Active ' + def.dur + 's' : ''}</div>
     <div class="tt-text">${def.text}</div>
     <div class="tt-tags">${def.tags.join(' · ')}</div>`;
 }
@@ -209,10 +210,6 @@ export function updateUI(game) {
   els.hpFill.style.width = `${(p.hp / p.maxHp) * 100}%`;
   els.hpText.textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`;
   els.armor.textContent = p.armor > 0 ? `⛨ ${Math.ceil(p.armor)}` : '';
-  const flowPct = (eng.flow / eng.maxFlow) * 100;
-  els.flowFill.style.width = `${flowPct}%`;
-  els.flowText.textContent = `${Math.floor(eng.flow)} / ${eng.maxFlow}`;
-  els.flowBar.classList.toggle('flow-full', eng.flow >= eng.maxFlow);
 
   // portrait plate: class glyph + world badge, plus the run clock
   const cls = CLASSES[game.playerClass];
@@ -225,15 +222,14 @@ export function updateUI(game) {
   const rt = Math.floor(game.runTime || 0);
   els.clock.textContent = `${Math.floor(rt / 60)}:${String(rt % 60).padStart(2, '0')}`;
 
-  // class resource (Rage / Opportunity)
+  // the single class resource (Mana / Rage / Focus) — Card System v2 §6
   const res = (cls || {}).resource;
   if (res && game.state !== 'title') {
     els.resWrap.classList.remove('hidden');
     els.resLabel.textContent = res.name;
-    const val = res.key === 'rage' ? game.rage : game.opportunity;
-    els.resFill.style.width = `${(val / res.max) * 100}%`;
+    els.resFill.style.width = `${(eng.flow / eng.maxFlow) * 100}%`;
     els.resFill.style.background = res.color;
-    els.resText.textContent = res.pips ? `${Math.floor(val)} / ${res.max}` : `${Math.floor(val)}`;
+    els.resText.textContent = res.pips ? `${Math.floor(eng.flow)} / ${eng.maxFlow}` : `${Math.floor(eng.flow)}`;
   } else {
     els.resWrap.classList.add('hidden');
   }
@@ -361,13 +357,13 @@ function popCard(def) {
 
 function rebuildPipeline(game) {
   const eng = game.engine;
-  els.deckCount.textContent = eng.deck.length;
-  els.discardCount.textContent = eng.discard.length;
 
-  // queue row
+  // queue row: only "next" and "following" are shown — Card System v2 §10.3/§20.
+  // The engine keeps buffering internally at eng.queueCap; only the rendered
+  // slice shrinks.
   els.queueRow.innerHTML = '';
   const newKnown = new Set();
-  eng.queue.forEach((inst, i) => {
+  eng.queue.slice(0, VISIBLE_QUEUE_SLOTS).forEach((inst, i) => {
     const el = buildCardEl(inst.def, 'mini', inst.lvl || 0);
     if (inst.cost !== inst.def.cost) el.querySelector('.card-cost').textContent = inst.cost;
     if (i === 0) {
@@ -380,7 +376,7 @@ function rebuildPipeline(game) {
     newKnown.add(inst.uid);
   });
   knownQueueUids = newKnown;
-  for (let i = eng.queue.length; i < eng.queueCap; i++) {
+  for (let i = Math.min(eng.queue.length, VISIBLE_QUEUE_SLOTS); i < VISIBLE_QUEUE_SLOTS; i++) {
     const ghost = document.createElement('div');
     ghost.className = 'card mini ghost';
     els.queueRow.appendChild(ghost);
@@ -493,8 +489,9 @@ function syncSanctuary(game) {
     const price = CARD_PRICES[def.rarity];
     const btn = document.createElement('button');
     btn.className = 'sanct-btn';
-    btn.textContent = `BUY ◈${price}`;
-    if (game.gold < price) btn.disabled = true;
+    const acquirable = canAcquireCard(game.deckIds, def.id);
+    btn.textContent = acquirable ? `BUY ◈${price}` : (game.deckIds.length >= 12 ? 'DECK FULL' : 'MAX COPIES');
+    if (game.gold < price || !acquirable) btn.disabled = true;
     btn.addEventListener('click', () => { buyCard(game, idx); });
     const name = document.createElement('div');
     name.className = 'shop-name';

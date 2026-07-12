@@ -50,7 +50,7 @@ registerBehavior<RivalState>('rival', {
       if (state.casting.t >= state.casting.dur) state.casting = null;
     } else if (state.castT <= 0) {
       state.castT = game.rng.range(6.5, 9);
-      const spells = (e.featured || []).filter((d) => d.cat === 'Spell' || d.cat === 'Power');
+      const spells = (e.featured || []).filter((d) => d.cat === 'Signature' || d.cat === 'Power');
       const card = spells.length ? game.rng.pick(spells) : null;
       const castDur = 1.8;
       state.casting = { def: card, t: 0, dur: castDur };

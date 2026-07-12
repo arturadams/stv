@@ -7,7 +7,7 @@
 export { createGame, colorOf } from './sim/game.js';
 export { updateGame } from './sim/update.js';
 export {
-  advanceWorld, prepareRun, rollStartingDeck, startRun,
+  advanceWorld, canAcquireCard, prepareRun, rollStartingDeck, startRun,
 } from './sim/run/lifecycle.js';
 export { applyReward } from './sim/run/rewards.js';
 export { resolveEncounterChoice } from './sim/run/matchmaking.js';

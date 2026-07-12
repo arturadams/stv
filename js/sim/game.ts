@@ -10,7 +10,6 @@ import { runEnchantAction } from './effects/enchantActions.js';
 import type { EnchantPayload, EnchantRef } from './effects/enchantActions.js';
 import { spark, mote, floater } from './fx.js';
 import { bossCleared } from './map/features.js';
-import { classChannelMult, gainOpportunity } from './player.js';
 import { duelVictory } from './run/matchmaking.js';
 import type { GameState } from './types.js';
 
@@ -34,8 +33,9 @@ export function createGame(opts: { seed?: number } = {}): GameState {
       dodgeCredited: false, touchCd: 0, trail: [],
       attackT: 0.5, basicCount: 0, empower: null,
     },
-    // class resources
-    rage: 0, rageDecayT: 0, opportunity: 0,
+    // class resources — the resource itself lives on engine.flow/maxFlow
+    lastCombatT: -Infinity,
+    resourceMeters: { regenT: 0, armorBlockCd: 0, damageTakenCd: 0, critCd: 0, hitCount: 0 },
     dashOverride: null, // a card owning the Dash
     enemies: [], projectiles: [], enemyProjectiles: [], zones: [], hazards: [], telegraphs: [],
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
@@ -53,7 +53,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     ally: null, // partied rival
     encounterPause: false,
     banner: null, pendingReward: null, rewardQueue: [],
-    stolen: null, dangerT: 0, kills: 0, runTime: 0, campsCleared: 0, bossesSlain: 0, worldBossesSlain: 0, duelsWon: 0,
+    stolen: null, kills: 0, runTime: 0, campsCleared: 0, bossesSlain: 0, worldBossesSlain: 0, duelsWon: 0,
     spawnT: 1.5,
     gold: 30, sanctuary: null,
     deckIds: STARTING_DECKS.mage.map((id) => ({ id, lvl: 0 })),
@@ -67,7 +67,6 @@ export function createGame(opts: { seed?: number } = {}): GameState {
   engine.resolveCard = (inst: CardInstance, buffs: Buffs, preview: EffectPreview | null) => resolveCard(game, inst, buffs, preview);
   engine.computePreview = (def: CardDef, buffs: Buffs) => computePreview(game, def, buffs);
   engine.runEnchantAction = (doSpec: EnchantDo, payload: EnchantPayload, ench?: EnchantRef) => runEnchantAction(game, doSpec, payload, ench);
-  engine.classChannelMult = (def: CardDef) => classChannelMult(game, def);
 
   bus.on(EVT.cardResolved, ({ inst }) => {
     sfx('resolve', inst.def.element);
@@ -80,13 +79,15 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     }
   });
   bus.on(EVT.perfectDodge, () => {
-    engine.gainFlow(2, 'dodge');
-    gainOpportunity(game, 1);
+    // §7-9's per-class perfect-dodge table: Mage/Rogue +2, Warrior +1.
+    engine.gainFlow(game.playerClass === 'warrior' ? 1 : 2, 'perfect_dodge');
     floater(game, game.player.x, game.player.y - 30, 'PERFECT', '#ffd97a', 18);
     game.slowmo = 0.22;
     sfx('perfect');
   });
-  bus.on(EVT.trapTriggered, () => gainOpportunity(game, 1));
+  bus.on(EVT.trapTriggered, () => {
+    if (game.playerClass === 'rogue') engine.gainFlow(1, 'trap_trigger');
+  });
   bus.on(EVT.enemyKilled, ({ enemy }) => {
     if (enemy.def.rival) duelVictory(game, enemy);
     else if (enemy.def.boss && game.zoneRegion?.kind === 'boss') bossCleared(game);

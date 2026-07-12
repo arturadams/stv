@@ -26,12 +26,13 @@ export const ATTUNEMENT_IDS = [
   'storm_attunement',
 ];
 
-// ── Starting decks per class ──
+// ── Fixed starting decks per class — Card System v2 (rework_cards.md) §15 ──
+// No random rolls: every run of a class begins with exactly this 8-card hand.
 export const STARTING_DECKS = {
-  mage: ['flame_attunement', 'flame_attunement', 'frost_nova', 'arc_lightning',
-    'mana_burst', 'teleport', 'frost_attunement', 'draw', 'battery', 'quickcast'],
-  warrior: ['cleaving_stance', 'cleaving_stance', 'charge', 'whirlwind',
-    'shield_wall', 'thunder_hammer', 'iron_skin', 'draw', 'battery', 'stabilize'],
-  rogue: ['poisoned_blades', 'poisoned_blades', 'trap_card', 'fan_of_knives',
-    'shadowstep', 'smoke_bomb', 'deathmark', 'draw', 'battery', 'quickcast'],
+  mage: ['mana_burst', 'mana_burst', 'frost_nova', 'frost_nova',
+    'arc_lightning', 'teleport', 'rune_prison', 'arcane_mirror'],
+  warrior: ['iron_skin', 'iron_skin', 'cleaving_stance', 'charge',
+    'whirlwind', 'riposte', 'thunder_hammer', 'execute'],
+  rogue: ['poisoned_blades', 'poisoned_blades', 'shadowstep', 'trap_card',
+    'backstab', 'smoke_bomb', 'deathmark', 'fan_of_knives'],
 } satisfies Record<ClassId, readonly string[]>;

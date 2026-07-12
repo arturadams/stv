@@ -51,33 +51,22 @@
           <span id="portrait-world"></span>
         </div>
         <div id="console-center">
-          <!-- the card pipeline: Deck → Queue → Active → Discard -->
+          <!-- the card pipeline: current card, then the next two -->
           <div id="pipeline">
-            <div class="pile" id="deck-pile">
-              <div class="pile-card"><span class="pile-glyph">⎘</span><span id="deck-count">0</span></div>
-              <div class="pile-label">DECK</div>
-            </div>
-            <div class="pipe-arrow">❯</div>
-            <div id="queue-wrap">
-              <div id="queue-row"></div>
-              <div class="pile-label">QUEUE</div>
-            </div>
-            <div class="pipe-arrow">❯</div>
             <div id="channel-wrap">
               <div id="channel-slot"></div>
               <div class="pile-label">ACTIVE</div>
               <div id="active-name"></div>
             </div>
             <div class="pipe-arrow">❯</div>
-            <div class="pile" id="discard-pile">
-              <div class="pile-card dim"><span class="pile-glyph">☓</span><span id="discard-count">0</span></div>
-              <div class="pile-label">DISCARD</div>
+            <div id="queue-wrap">
+              <div id="queue-row"></div>
+              <div class="pile-label">NEXT</div>
             </div>
           </div>
           <div id="vitals">
             <div id="hp-bar" class="bar hp"><div id="hp-fill"></div><span id="hp-text" class="bar-text"></span><span id="armor-chip"></span></div>
-            <div id="flow-bar" class="bar flow"><div id="flow-fill"></div><span id="flow-text" class="bar-text"></span></div>
-            <div id="res-wrap" class="bar res hidden"><div id="res-fill"></div><span id="res-label"></span><span id="res-text" class="bar-text"></span></div>
+            <div id="res-wrap" class="bar res"><div id="res-fill"></div><span id="res-label"></span><span id="res-text" class="bar-text"></span></div>
           </div>
         </div>
         <div id="console-right">
@@ -122,10 +111,9 @@
       <div id="setup-class"></div>
       <div class="sanct-h setup-h">CHOOSE A WORLD</div>
       <div id="world-row"></div>
-      <div class="sanct-h setup-h">YOUR STARTING CARDS — 9 common, 1 uncommon</div>
+      <div class="sanct-h setup-h">YOUR STARTING DECK</div>
       <div id="start-cards"></div>
       <div id="setup-buttons">
-        <button id="reroll-btn">↺ REROLL</button>
         <button id="enter-btn">ENTER THE REALM</button>
       </div>
     </div>

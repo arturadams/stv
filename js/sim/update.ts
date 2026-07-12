@@ -13,7 +13,7 @@ import { updateZones } from './entities/zones.js';
 import { floater } from './fx.js';
 import { CHUNK, biomeOf, chunksNear, worldDef } from './map/chunks.js';
 import { updateWorldFeatures } from './map/features.js';
-import { updatePlayer } from './player.js';
+import { tickResourceRegen, updatePlayer } from './player.js';
 import { updateDeniedEncounter, updateMatchmaking } from './run/matchmaking.js';
 import { updateAmbientSpawns } from './run/spawning.js';
 import type { GameState, Input } from './types.js';
@@ -60,9 +60,8 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
   updateSustains(game, dt);
   updateTraps(game, dt);
 
-  // class resources
-  if (game.rageDecayT > 0) game.rageDecayT -= dt;
-  else if (game.rage > 0) game.rage = Math.max(0, game.rage - 4 * dt);
+  // class resources — passive regen while in active combat (§6)
+  tickResourceRegen(game, dt);
 
   // the card that owns the Dash counts down
   if (game.dashOverride) {
@@ -70,16 +69,6 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
     if (game.dashOverride.timeLeft <= 0) {
       floater(game, game.player.x, game.player.y - 30, 'DASH RESTORED', '#d9b45b', 11);
       game.dashOverride = null;
-    }
-  }
-
-  // proximity flow: staying near danger builds momentum
-  const near = game.enemies.some((e) => e.state !== 'spawn' && Math.hypot(e.x - game.player.x, e.y - game.player.y) < 230);
-  if (near) {
-    game.dangerT += dt;
-    if (game.dangerT >= 2) {
-      game.dangerT = 0;
-      eng.gainFlow(1, 'danger');
     }
   }
 

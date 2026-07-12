@@ -11,6 +11,7 @@ export interface CardDefView {
   tags: readonly string[];
   world?: number;
   effects: readonly unknown[];
+  disabled?: boolean;
 }
 
 export interface DeckEntryView {

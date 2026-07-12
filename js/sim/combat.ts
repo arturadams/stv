@@ -8,7 +8,6 @@ import type {
 } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { sfx } from '../audio.js';
-import { gainOpportunity, gainRage } from './player.js';
 import { floater, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
@@ -36,11 +35,24 @@ export type CombatState = FeatureState & Pick<
   | 'encounterPause'
   | 'state'
   | 'playerClass'
-  | 'rage'
-  | 'rageDecayT'
-  | 'opportunity'
+  | 'runTime'
+  | 'lastCombatT'
+  | 'resourceMeters'
   | 'projectiles'
 >;
+
+// §6's "active combat" definition (rework_cards.md): a boss/duel zone is
+// live, the player dealt or took damage in the last 5s, or a hostile enemy
+// is within combat range. Gates passive resource regen — see
+// player.ts's tickResourceRegen.
+const ACTIVE_COMBAT_RADIUS = 230;
+
+export function isActiveCombat(game: CombatState): boolean {
+  if (game.zoneRegion?.kind === 'boss' || game.zoneRegion?.kind === 'duel') return true;
+  if (game.runTime - game.lastCombatT < 5) return true;
+  const p = game.player;
+  return game.enemies.some((e) => targetable(e) && Math.hypot(e.x - p.x, e.y - p.y) < ACTIVE_COMBAT_RADIUS);
+}
 
 export interface DamageOpts {
   crit?: boolean;
@@ -143,6 +155,7 @@ export function damageEnemy(
   opts: DamageOpts = {},
 ): void {
   if (!targetable(enemy)) return;
+  game.lastCombatT = game.runTime;
   let damage = amount;
   if (enemy.mark && enemy.mark.t > 0) damage *= enemy.mark.amp;
   if (opts.crit) damage *= 2;
@@ -262,11 +275,9 @@ export function killEnemy(
     });
   }
 
-  const player = game.player;
-  if (Math.hypot(enemy.x - player.x, enemy.y - player.y) < 170) {
-    gainRage(game, 6);
+  if (game.playerClass === 'rogue' && enemy.statuses.poison) {
+    game.engine.gainFlow(1, 'poisoned_kill');
   }
-  gainOpportunity(game, enemy.statuses.poison ? 2 : 1);
 
   if (enemy.campRef) {
     enemy.campRef.alive -= 1;
@@ -293,13 +304,17 @@ export function damagePlayer(
     }
     return;
   }
+  game.lastCombatT = game.runTime;
   let damage = amount;
   if (player.armor > 0) {
     const absorbed = Math.min(player.armor, damage);
     player.armor -= absorbed;
     damage -= absorbed;
     floater(game, player.x, player.y - 24, 'BLOCK ' + absorbed, '#ffd97a', 12);
-    gainRage(game, 4);
+    if (game.playerClass === 'warrior' && game.resourceMeters.armorBlockCd <= 0) {
+      game.engine.gainFlow(1, 'armor_block');
+      game.resourceMeters.armorBlockCd = 1.5;
+    }
   }
   if (damage <= 0) return;
 
@@ -309,7 +324,10 @@ export function damagePlayer(
   game.hitstop = Math.max(game.hitstop, 0.05);
   sfx('hurt');
   player.iframes = Math.max(player.iframes, 0.5);
-  gainRage(game, 10);
+  if (game.playerClass === 'warrior' && game.resourceMeters.damageTakenCd <= 0) {
+    game.engine.gainFlow(1, 'damage_taken');
+    game.resourceMeters.damageTakenCd = 2;
+  }
   for (const power of game.engine.powers as PowerRef[]) {
     if (power.spec.extendOnHit) power.timeLeft += power.spec.extendOnHit;
   }
@@ -335,6 +353,10 @@ export function hitEnemy(
     critChance += enemy.mark.crit;
   }
   const crit = game.rng.chance(critChance);
+  if (crit && game.playerClass === 'rogue' && game.resourceMeters.critCd <= 0) {
+    game.engine.gainFlow(1, 'critical_hit');
+    game.resourceMeters.critCd = 2;
+  }
   damageEnemy(game, enemy, rawDamage * context.dmgMult, {
     crit,
     color: ELEMENT_COLORS[context.def.element],

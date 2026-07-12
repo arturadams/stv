@@ -3,6 +3,7 @@ import type { CardDef, Rarity, Sanctuary } from '../../data/types.js';
 import { makeRng } from '../../core/rng.js';
 import { sfx } from '../../audio.js';
 import type { DeckEntry, GameState } from '../types.js';
+import { canAcquireCard } from './lifecycle.js';
 import { draftWeight } from './rewards.js';
 
 // ═══ sanctuaries: rest, trade, and combine duplicate cards ═══
@@ -58,6 +59,7 @@ export function buyCard(game: GameState, idx: number): boolean {
   const def = s.stock[idx];
   const price = CARD_PRICES[def.rarity];
   if (game.gold < price) return false;
+  if (!canAcquireCard(game.deckIds, def.id)) return false;
   game.gold -= price;
   s.stock.splice(idx, 1);
   game.deckIds.push({ id: def.id, lvl: 0 });

@@ -146,20 +146,15 @@ body.touch-mode .title-rules.kb-rules { display: none; }
   position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 1;
   font-size: 10.5px; font-weight: bold; color: #ffe9a8; text-shadow: 0 1px 2px #000;
 }
-.bar.flow { height: 13px; }
-#flow-fill { width: 40%; background: linear-gradient(to bottom, var(--mana-hi), var(--mana) 45%, var(--mana-dark)); transition: width 0.15s ease-out; }
-#flow-bar.flow-full #flow-fill { box-shadow: 0 0 12px rgba(109, 180, 238, 0.85); }
-.bar.flow .bar-text { font-size: 10px; }
-
-.bar.res { height: 10px; }
-.bar.res::after { display: none; }
-#res-fill { width: 0%; transition: width 0.15s ease-out; }
+/* the single class resource bar (Mana / Rage / Focus) — Card System v2 §6/§20 */
+.bar.res { height: 13px; }
+#res-fill { width: 0%; background: linear-gradient(to bottom, var(--mana-hi), var(--mana) 45%, var(--mana-dark)); transition: width 0.15s ease-out; }
 #res-label {
   position: absolute; left: 6px; top: 50%; transform: translateY(-50%); z-index: 1;
   font-size: 8px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase;
   color: rgba(255, 255, 255, 0.75); text-shadow: 0 1px 2px #000;
 }
-.bar.res .bar-text { font-size: 9px; }
+.bar.res .bar-text { font-size: 10px; }
 
 /* ── the bottom console ── */
 #console {
@@ -312,21 +307,6 @@ body.touch-mode .title-rules.kb-rules { display: none; }
   text-align: center; font-size: 9px; font-weight: bold; letter-spacing: 2.5px;
   color: var(--text-dim); margin-top: 5px;
 }
-.pile-card {
-  width: 54px; height: 78px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  background:
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 3px, transparent 3px 7px),
-    linear-gradient(160deg, var(--bg3), var(--bg1));
-  border: 1px solid var(--edge);
-  border-radius: 2px;
-  box-shadow: 1px 1px 0 #000, inset 0 0 14px rgba(0, 0, 0, 0.55);
-  color: var(--text-bright);
-  font-size: 17px; font-weight: bold;
-}
-.pile-card.dim { filter: saturate(0.4) brightness(0.75); }
-.pile-glyph { font-size: 15px; opacity: 0.8; font-weight: normal; }
-
 #queue-row { display: flex; gap: 6px; min-height: 84px; align-items: center; }
 #queue-wrap, #channel-wrap { display: flex; flex-direction: column; align-items: center; }
 
@@ -676,8 +656,6 @@ button:hover {
 }
 #start-cards { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0 20px; }
 #setup-buttons { display: flex; gap: 18px; justify-content: center; }
-#reroll-btn { font-size: 11px; padding: 12px 22px; letter-spacing: 2px; opacity: 0.85; }
-#reroll-btn:hover { opacity: 1; }
 
 /* ═══ rival encounter overlay ═══ */
 #enc-name { font-size: 20px; font-weight: bold; letter-spacing: 3px; margin-top: 4px; text-shadow: 0 0 18px rgba(0, 0, 0, 0.8); }
@@ -728,8 +706,8 @@ button:hover {
   #portrait-plate { display: none; }
   /* bump inner sizes so bars stay readable after the 0.48 downscale */
   .bar { height: 26px; }
-  .bar.flow { height: 20px; }
-  .bar-text, .bar.flow .bar-text { font-size: 17px; }
+  .bar.res { height: 20px; }
+  .bar-text, .bar.res .bar-text { font-size: 17px; }
   #armor-chip { font-size: 15px; }
   #combo { top: 64px; font-size: 16px; }
   #banner-title { font-size: 22px; letter-spacing: 4px; }

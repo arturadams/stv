@@ -275,6 +275,19 @@ export interface DeckEntry {
   lvl: number;
 }
 
+// per-class resource-gain bookkeeping — one small bag instead of separate
+// Rage/Opportunity state, since only one class's gain rules read it at a
+// time. `hitCount` is reused for the Mage bolt-counter and the Warrior
+// swing-counter. See player.ts's tickResourceRegen and combat.ts's
+// isActiveCombat.
+export interface ResourceMeters {
+  regenT: number;
+  armorBlockCd: number;
+  damageTakenCd: number;
+  critCd: number;
+  hitCount: number;
+}
+
 export interface GameState {
   bus: EventBus;
   engine: CardEngine;
@@ -288,9 +301,8 @@ export interface GameState {
   world: number;
   playerClass: ClassId;
   player: PlayerState;
-  rage: number;
-  rageDecayT: number;
-  opportunity: number;
+  lastCombatT: number;
+  resourceMeters: ResourceMeters;
   dashOverride: DashOverride | null;
   enemies: EnemyState[];
   projectiles: Projectile[];
@@ -323,7 +335,6 @@ export interface GameState {
   pendingReward: PendingReward | null;
   rewardQueue: PendingReward[];
   stolen: StolenCard | null;
-  dangerT: number;
   kills: number;
   runTime: number;
   campsCleared: number;

@@ -134,6 +134,10 @@ describe('forced headless paths', () => {
   it('characterizes sanctuary buying, selling floor, and combining', () => {
     const game = makeHeadlessGame(606);
     game.gold = 1000;
+    // start from an empty deck so the purchase below can't be rejected by
+    // the max-2-copies rule (Card System v2 §10.2) colliding with whatever
+    // the fixed starting deck happens to already carry two of.
+    game.deckIds = [];
     openSanctuary(game, {
       x: game.player.x,
       y: game.player.y,

@@ -2,6 +2,7 @@ import { CARD_LIST, CLASSES, RELICS } from '../../data/index.js';
 import type { CardDef, RelicDef } from '../../data/types.js';
 import { sfx } from '../../audio.js';
 import type { GameState, Reward } from '../types.js';
+import { canAcquireCard } from './lifecycle.js';
 import { metaUnlockedWorld } from './meta.js';
 
 const relicDefs: Record<string, RelicDef> = RELICS;
@@ -16,8 +17,9 @@ const RARITY_WEIGHT: Record<CardDef['rarity'], number> = {
 
 export function draftWeight(
   game: Pick<GameState, 'world' | 'playerClass' | 'hasCrossClass'>,
-  c: Pick<CardDef, 'world' | 'rarity' | 'school'>,
+  c: Pick<CardDef, 'world' | 'rarity' | 'school' | 'disabled'>,
 ): number {
+  if (c.disabled) return 0; // Card System v2 §17: hidden from every live pool
   const cardWorld = c.world || 1;
   const here = game.world || 1;
   if (cardWorld > Math.max(here, metaUnlockedWorld())) return 0; // never reached
@@ -83,6 +85,13 @@ export function offerReward(
 }
 
 export function applyReward(game: GameState, choice: CardDef | RelicDef | null): void {
+  // §10.2: deck-size-12 / max-2-copies cap — a pick that can't be taken
+  // (deck full, or already at 2 copies) falls through to the decline reward
+  // instead of silently exceeding the cap. A full replace-or-decline picker
+  // is a separate feature, not built here.
+  if (choice && game.pendingReward?.type === 'card' && !canAcquireCard(game.deckIds, choice.id)) {
+    choice = null;
+  }
   if (choice && game.pendingReward) {
     if (game.pendingReward.type === 'card') {
       game.deckIds.push({ id: choice.id, lvl: 0 });

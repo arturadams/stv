@@ -39,7 +39,7 @@ export function updateAlly(game: GameState, dt: number): void {
     al.castT = game.rng.range(8, 11);
     const tx2 = target.x;
     const ty2 = target.y;
-    const card = al.featured.find((c) => c.cat === 'Spell') || al.featured[0];
+    const card = al.featured.find((c) => c.cat === 'Signature') || al.featured[0];
     const color = card ? colorOf(card) : al.color;
     al.casting = { def: card, t: 0, dur: 1.4 };
     game.telegraphs.push({

@@ -51,7 +51,6 @@ export class CardEngine {
     this.resolveCard = null;       // (inst, buffs, preview, i) => void
     this.computePreview = null;    // (def, buffs) => preview | null
     this.runEnchantAction = null;  // (doSpec, payload, ench) => void
-    this.classChannelMult = null;  // (def) => mult — Rage / Opportunity hook
     this.followPos = null;         // {x, y} — set every frame so self-centered previews can follow the player
     const dispatch = (ev) => (p) => this.dispatchEnchants(ev, p);
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
@@ -141,7 +140,6 @@ export class CardEngine {
     this.flow -= cost;
     this.queue.shift();
     let dur = def.channel * buffs.channelMult * this.channelMultGlobal * this.nextChannelMult * flushSpeed;
-    if (this.classChannelMult) dur *= this.classChannelMult(def);
     this.nextChannelMult = 1;
     dur = Math.max(0, dur);
     const preview = this.computePreview ? this.computePreview(def, buffs) : null;

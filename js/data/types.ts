@@ -1,7 +1,7 @@
 import type { EventMap } from '../core/events.js';
 
 export type School = 'Mage' | 'Warrior' | 'Rogue' | 'Colorless';
-export type Cat = 'Power' | 'Skill' | 'Spell' | 'Trigger' | 'Engine' | 'Modifier';
+export type Cat = 'Power' | 'Technique' | 'Signature';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Legendary';
 export type ElementId =
   | 'fire'
@@ -362,6 +362,11 @@ export interface CardDef {
   element: ElementId;
   text: string;
   effects: readonly EffectSpec[];
+  // pool-exclusion flag: kept in source/registered in CARD_LIST, but hidden
+  // from drafts, starting decks, sanctuary stock, and rival/ally card AI —
+  // see Card System v2 (rework_cards.md) §17/§24 for the non-destructive
+  // "disable in pools, don't delete" migration rule.
+  disabled?: boolean;
 }
 
 export interface CardInstance {
@@ -649,9 +654,13 @@ export interface ProjBasic extends BasicAttack {
 }
 
 export interface ClassResource {
-  key: 'rage' | 'opportunity';
+  key: 'mana' | 'rage' | 'focus';
   name: string;
   max: number;
+  starting: number;
+  // seconds per +1 passive tick while in active combat — see player.ts's
+  // tickResourceRegen and combat.ts's isActiveCombat.
+  regenInterval: number;
   color: string;
   pips?: boolean;
 }
@@ -665,7 +674,7 @@ export interface ClassDef {
   tagline: string;
   desc: string;
   basic: ArcBasic | ProjBasic;
-  resource: ClassResource | null;
+  resource: ClassResource;
 }
 
 export type Rgb = readonly [red: number, green: number, blue: number];

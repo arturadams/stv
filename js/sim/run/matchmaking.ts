@@ -20,11 +20,11 @@ function makeRivalSoul(game: Pick<GameState, 'rng' | 'world'>): RivalSoulSeed {
   const cls = game.rng.pick(classIds);
   const cdef = CLASSES[cls];
   const name = `${game.rng.pick(RIVAL_ADJECTIVES)} ${cdef.name}`;
-  // featured cards: the build identity — 1 Power, 1 Spell, 1 other, 1 Colorless
+  // featured cards: the build identity — 1 Power, 1 Signature, 1 other, 1 Colorless
   const school = cdef.school;
   const pick = (fn: (c: CardDef) => boolean) => {
-    const pool = CARD_LIST.filter((c) => (c.world || 1) <= (game.world || 1) && fn(c));
-    return game.rng.pick(pool);
+    const pool = CARD_LIST.filter((c) => !c.disabled && (c.world || 1) <= (game.world || 1) && fn(c));
+    return pool.length ? game.rng.pick(pool) : undefined;
   };
   const featured: CardDef[] = [];
   const used = new Set<string>();
@@ -35,7 +35,7 @@ function makeRivalSoul(game: Pick<GameState, 'rng' | 'world'>): RivalSoulSeed {
     }
   };
   add(pick((c) => c.school === school && c.cat === 'Power'));
-  add(pick((c) => c.school === school && c.cat === 'Spell'));
+  add(pick((c) => c.school === school && c.cat === 'Signature'));
   add(pick((c) => c.school === school && !used.has(c.id)));
   add(pick((c) => c.school === 'Colorless' && !used.has(c.id)));
   return { cls, name, featured, color: cdef.color };
