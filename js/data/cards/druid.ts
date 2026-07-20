@@ -21,9 +21,9 @@ card({ id: 'venom_aspect', name: 'Venom Aspect', school: 'Druid', cat: 'Power', 
   effects: [{ type: 'power', dur: 9, power: { addStatus: ['poison', 2], element: 'poison' } }] });
 
 card({ id: 'pounce', name: 'Pounce', school: 'Druid', cat: 'Technique', rarity: 'Common',
-  cost: 2, channel: 0.4, targeting: 'nearest', tags: ['Beast', 'Movement', 'Melee'], glyph: '➶', element: 'physical',
-  text: 'Leap through the nearest pack, raking and knocking aside everything in your path.',
-  effects: [{ type: 'dashAttack', dist: 210, dmg: 17, gather: 90, knockback: 80 }] });
+  cost: 2, channel: 0.4, dur: 8, targeting: 'self', tags: ['Beast', 'Movement', 'Melee'], glyph: '➶', element: 'physical',
+  text: 'For 8s, replace Dodge with a raking Pounce that carries enemies through your path.',
+  effects: [{ type: 'dashOverride', dur: 8, move: { kind: 'charge', dist: 210, dmg: 17, gather: 90, cd: 0.9 } }] });
 
 card({ id: 'barkskin', name: 'Barkskin', school: 'Druid', cat: 'Technique', rarity: 'Common',
   cost: 1, channel: 0.4, targeting: 'self', tags: ['Nature', 'Defense'], glyph: '♧', element: 'physical',

@@ -58,6 +58,26 @@ function chunkKey(cx: number, cy: number): string {
   return `${cx},${cy}`;
 }
 
+// boss gates seal a wide trigger radius (zoneR - 90, see engageBossGate) —
+// keep new ones from landing inside a neighbor's radius so clearing one gate
+// doesn't immediately chain-pull the player into the next
+const MIN_LANDMARK_DIST = 900;
+
+function nearbyLandmark(game: ChunkState, x: number, y: number): boolean {
+  const cx = Math.floor(x / CHUNK);
+  const cy = Math.floor(y / CHUNK);
+  const reach = Math.ceil(MIN_LANDMARK_DIST / CHUNK);
+  for (let dy = -reach; dy <= reach; dy++) {
+    for (let dx = -reach; dx <= reach; dx++) {
+      const other = game.chunks.get(chunkKey(cx + dx, cy + dy));
+      if (other?.landmark && Math.hypot(other.landmark.x - x, other.landmark.y - y) < MIN_LANDMARK_DIST) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 export function getChunk(game: ChunkState, cx: number, cy: number): Chunk {
   const key = chunkKey(cx, cy);
   let chunk = game.chunks.get(key);
@@ -119,14 +139,16 @@ export function getChunk(game: ChunkState, cx: number, cy: number): Chunk {
   }
   if (rng.chance(0.035) && distance >= 4) {
     const point = at(200);
-    chunk.landmark = {
-      x: point.x,
-      y: point.y,
-      r: 120,
-      zoneR: 430,
-      cleared: false,
-      engaged: false,
-    };
+    if (!nearbyLandmark(game, point.x, point.y)) {
+      chunk.landmark = {
+        x: point.x,
+        y: point.y,
+        r: 120,
+        zoneR: 430,
+        cleared: false,
+        engaged: false,
+      };
+    }
   }
   if (rng.chance(0.05) && distance >= 1 && !chunk.camp) {
     chunk.treasure = { ...at(90), opened: false };
