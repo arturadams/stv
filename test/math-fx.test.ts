@@ -17,7 +17,7 @@ function makeFxState(seed = 1): FxState {
     floaters: [],
     particles: [],
     fx: [],
-    camera: { x: 0, y: 0, shake: 0 },
+    camera: { x: 0, y: 0, shake: 0, impulseX: 0, impulseY: 0 },
   };
 }
 

@@ -8,7 +8,7 @@ import type {
 } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { sfx } from '../audio.js';
-import { floater, ringFx, shake, spark } from './fx.js';
+import { floater, impact, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
 import { spawnEnemy } from './entities/spawn.js';
@@ -411,6 +411,9 @@ export function chainFrom(
       t: 0,
       life: 0.22,
     });
+    // endpoint impact: star flash, sparks, brief circular refraction
+    impact(game, current.x, current.y, ELEMENT_COLORS.lightning);
+    ringFx(game, current.x, current.y, current.r + 10, ELEMENT_COLORS.lightning, 0.22);
     hitEnemy(game, current, spec.dmg, context, spec);
     previousX = current.x;
     previousY = current.y;

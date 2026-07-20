@@ -4,6 +4,7 @@ import type { ArcBasic, ElementId, ProjBasic, ProjectileSpec, StatusApp } from '
 import { wrapAngle } from '../core/math.js';
 import { sfx } from '../audio.js';
 import { hitEnemy, nearestEnemy, spawnPlayerProj, targetable } from './combat.js';
+import { impact, impulse } from './fx.js';
 import type { GameState } from './types.js';
 
 // CardEngine itself isn't typed until R3.6 — this narrows just the shape
@@ -92,6 +93,11 @@ export function updateBasicAttack(game: GameState, dt: number): void {
       kind: 'arc', x: p.x, y: p.y, ang, arc: half * 2, range: reach,
       color: ELEMENT_COLORS[base.element], t: 0, life: 0.22,
     });
+    if (hits > 0) {
+      // white-hot contact flash + a short directional camera impulse
+      impact(game, p.x + Math.cos(ang) * reach * 0.55, p.y + Math.sin(ang) * reach * 0.55, ELEMENT_COLORS[base.element], ang);
+      impulse(game, ang + Math.PI, Math.min(6, 2 + hits));
+    }
     sfx('slash');
   } else {
     // projectile bolt / knife — possibly transformed by an active Power

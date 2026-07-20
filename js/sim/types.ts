@@ -69,6 +69,10 @@ export interface PlayerState extends Vec2 {
 
 export interface Camera extends Vec2 {
   shake: number;
+  /** Directional recoil kick (screen-space px), decays fast — distinct from
+   * the random jitter of `shake`. Set by `impulse()` in fx.ts. */
+  impulseX: number;
+  impulseY: number;
 }
 
 export interface MatchmakingState {
@@ -237,11 +241,14 @@ interface FxBase {
 }
 
 export type Fx =
-  | (FxBase & Vec2 & { kind: 'ring' | 'blast' | 'spawn'; r: number })
+  | (FxBase & Vec2 & { kind: 'ring' | 'spawn'; r: number })
+  | (FxBase & Vec2 & { kind: 'blast'; r: number; dir?: number })
   | (FxBase & Vec2 & { kind: 'rectblast'; w: number; h: number; ang?: number })
   | (FxBase & Vec2 & { kind: 'arc'; ang: number; arc: number; range: number })
   | (FxBase & { kind: 'bolt' | 'streak'; x1: number; y1: number; x2: number; y2: number })
-  | (FxBase & Vec2 & { kind: 'cast' });
+  | (FxBase & Vec2 & { kind: 'cast' })
+  | (FxBase & Vec2 & { kind: 'impactFlash'; dir?: number; crit?: boolean })
+  | (FxBase & Vec2 & { kind: 'sigil'; phase: 'collapse' | 'reconstruct' });
 
 export interface DashOverride {
   def: CardDef;

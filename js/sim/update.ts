@@ -106,6 +106,10 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
   cam.x += (game.player.x - cam.x) * Math.min(1, dt * 5);
   cam.y += (game.player.y - cam.y) * Math.min(1, dt * 5);
   cam.shake = Math.max(0, cam.shake - dt * 40);
+  // directional recoil snaps back hard — felt, not lingering
+  const impulseDecay = Math.max(0, 1 - dt * 16);
+  cam.impulseX *= impulseDecay;
+  cam.impulseY *= impulseDecay;
 
   if (game.banner) {
     game.banner.t -= dt;

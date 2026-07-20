@@ -88,3 +88,40 @@ export function ringFx(
 export function shake(game: FxState, amount: number): void {
   game.camera.shake = Math.min(26, game.camera.shake + amount);
 }
+
+/** Directional recoil — a short camera kick along `angle`, distinct from the
+ * random jitter of `shake`. Used for melee contact and heavy impacts. */
+export function impulse(game: FxState, angle: number, amount: number): void {
+  const cam = game.camera;
+  cam.impulseX = Math.max(-18, Math.min(18, cam.impulseX + Math.cos(angle) * amount));
+  cam.impulseY = Math.max(-18, Math.min(18, cam.impulseY + Math.sin(angle) * amount));
+}
+
+/** Compressed contact flash at a hit point — the "impact" beat. Pairs a
+ * white-hot core (drawn by the `impactFlash` fx) with a few fragments. */
+export function impact(
+  game: FxState,
+  x: number,
+  y: number,
+  color: string,
+  dir?: number,
+  crit = false,
+): void {
+  game.fx.push({
+    kind: 'impactFlash', x, y, color, dir, crit, t: 0, life: crit ? 0.16 : 0.1,
+  });
+  spark(game, x, y, color, crit ? 9 : 5, crit ? 210 : 130, crit ? 0.32 : 0.22);
+}
+
+/** Teleport sigil — a thin vertical glyph that collapses the caster on
+ * departure and reconstructs them on arrival, per the "arcane machinery"
+ * Mage direction. */
+export function sigil(
+  game: FxState,
+  x: number,
+  y: number,
+  color: string,
+  phase: 'collapse' | 'reconstruct',
+): void {
+  game.fx.push({ kind: 'sigil', x, y, color, phase, t: 0, life: phase === 'collapse' ? 0.2 : 0.32 });
+}

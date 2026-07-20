@@ -371,7 +371,8 @@ export function render(game, ctx, W, H) {
   ctx.fillStyle = worldDef(game).sky;
   ctx.fillRect(0, 0, W, H);
   ctx.save();
-  const shx = (Math.random() - 0.5) * cam.shake, shy = (Math.random() - 0.5) * cam.shake;
+  const shx = (Math.random() - 0.5) * cam.shake + (cam.impulseX || 0);
+  const shy = (Math.random() - 0.5) * cam.shake + (cam.impulseY || 0);
   ctx.translate(W / 2 + shx, H / 2 + shy);
   ctx.scale(scale, scale);
   ctx.translate(-cam.x, -cam.y);
@@ -1205,50 +1206,92 @@ function drawTrap(ctx, tr, t) {
   ctx.restore();
 }
 
+// last-20% urgency: pulse frequency AND brightness both ramp toward detonation
+function telegraphUrgency(prog, t) {
+  if (prog <= 0.75) return 0;
+  const u = (prog - 0.75) / 0.25;
+  const freq = 14 + u * 46;
+  return u * (0.55 + 0.45 * Math.sin(t * freq));
+}
+
 function drawTelegraph(ctx, tg, t) {
   const prog = tg.t / tg.dur;
   const c = tg.color || '#c23b4a';
+  const urgency = telegraphUrgency(prog, t);
   ctx.save();
   if (tg.shape === 'circle') {
-    ctx.fillStyle = hexA(c, 0.08 + prog * 0.16);
-    ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = hexA(c, 0.5); ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r * prog, 0, Math.PI * 2); ctx.stroke();
-    if (prog > 0.75 && !tg.friendly) {
-      ctx.fillStyle = hexA(c, (prog - 0.75) * 0.8 * (0.6 + 0.4 * Math.sin(t * 25)));
-      ctx.beginPath(); ctx.arc(tg.x, tg.y, tg.r, 0, Math.PI * 2); ctx.fill();
+    const { x, y, r } = tg;
+    // imminent-danger fill: a soft textured falloff, not a flat disc
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, hexA(c, 0.03 + prog * 0.04));
+    grad.addColorStop(0.78, hexA(c, 0.05 + prog * 0.08));
+    grad.addColorStop(1, hexA(c, 0));
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+    // one strong boundary
+    ctx.strokeStyle = hexA(c, 0.85); ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+
+    // subdued rim ticks — ritual-circle texture instead of a second outline
+    ctx.strokeStyle = hexA(c, 0.32); ctx.lineWidth = 1.5;
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * (r - 5), y + Math.sin(a) * (r - 5));
+      ctx.lineTo(x + Math.cos(a) * (r + 2), y + Math.sin(a) * (r + 2));
+      ctx.stroke();
+    }
+
+    // directional progression: a wedge sweeps closed as the timer runs out
+    ctx.strokeStyle = hexA(c, 0.6); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, r * 0.94, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); ctx.stroke();
+
+    if (urgency > 0 && !tg.friendly) {
+      ctx.fillStyle = hexA(c, urgency * 0.45);
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     }
   } else if (tg.shape === 'rect') {
     const { x, y, w, h } = tg;
     ctx.translate(x, y);
     if (tg.ang) ctx.rotate(tg.ang);
-    ctx.fillStyle = hexA(c, 0.08 + prog * 0.18);
+
+    ctx.fillStyle = hexA(c, 0.04 + prog * 0.07);
     ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2.5;
+    ctx.strokeStyle = hexA(c, 0.85); ctx.lineWidth = 2.5;
     ctx.strokeRect(-w / 2, -h / 2, w, h);
-    const cl = (w / 2) * prog;
-    ctx.fillStyle = hexA(c, 0.22);
-    ctx.fillRect(-w / 2, -h / 2, cl, h);
-    ctx.fillRect(w / 2 - cl, -h / 2, cl, h);
-    if (prog > 0.75 && !tg.friendly) {
-      ctx.fillStyle = hexA(c, (prog - 0.75) * 0.7 * (0.6 + 0.4 * Math.sin(t * 25)));
+
+    // advancing wave: one bright leading edge sweeps the length once
+    const lx = -w / 2 + w * Math.min(1, Math.max(0, prog));
+    const edgeGrad = ctx.createLinearGradient(lx - 28, 0, lx, 0);
+    edgeGrad.addColorStop(0, hexA(c, 0));
+    edgeGrad.addColorStop(1, hexA(c, 0.45));
+    ctx.fillStyle = edgeGrad;
+    ctx.fillRect(lx - 28, -h / 2, 28, h);
+    ctx.strokeStyle = hexA(c, 0.9); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(lx, -h / 2); ctx.lineTo(lx, h / 2); ctx.stroke();
+
+    if (urgency > 0 && !tg.friendly) {
+      ctx.fillStyle = hexA(c, urgency * 0.4);
       ctx.fillRect(-w / 2, -h / 2, w, h);
     }
   } else if (tg.shape === 'ring') {
     // annulus: safe inside, safe outside — the band is the promise
     const { x, y, r, band } = tg;
-    ctx.strokeStyle = hexA(c, 0.75); ctx.lineWidth = 2;
+    // one strong boundary on the outer edge; inner edge stays subdued
+    ctx.strokeStyle = hexA(c, 0.8); ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(x, y, r + band / 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = hexA(c, 0.22); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.arc(x, y, Math.max(4, r - band / 2), 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = hexA(c, 0.1 + prog * 0.3); ctx.lineWidth = band;
+
+    ctx.strokeStyle = hexA(c, 0.08 + prog * 0.14); ctx.lineWidth = band;
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
-    // the arming sweep runs the band like a fuse
+    // directional progression: the arming sweep runs the band like a fuse
     ctx.strokeStyle = hexA(c, 0.85); ctx.lineWidth = band * 0.55;
     ctx.beginPath(); ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2); ctx.stroke();
-    if (prog > 0.75 && !tg.friendly) {
-      ctx.strokeStyle = hexA(c, (prog - 0.75) * 0.9 * (0.6 + 0.4 * Math.sin(t * 25)));
+
+    if (urgency > 0 && !tg.friendly) {
+      ctx.strokeStyle = hexA(c, urgency * 0.5);
       ctx.lineWidth = band;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
     }
@@ -3456,11 +3499,64 @@ function drawFx(game, ctx) {
       ctx.strokeStyle = hexA(fx.color, inv * 0.8); ctx.lineWidth = 3 * inv + 1;
       ctx.beginPath(); ctx.arc(fx.x, fx.y, r, 0, Math.PI * 2); ctx.stroke();
     } else if (fx.kind === 'blast') {
+      const rr = fx.r * (0.6 + k * 0.5);
+      // ground compression: a squashed shadow the front punches into the floor
+      ctx.fillStyle = `rgba(10,8,6,${inv * 0.32})`;
+      ctx.beginPath();
+      ctx.ellipse(fx.x, fx.y, fx.r * (0.7 + k * 0.35), fx.r * (0.34 + k * 0.16), 0, 0, Math.PI * 2);
+      ctx.fill();
+
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = hexA(fx.color, inv * 0.28);
-      ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r * (0.5 + k * 0.6), 0, Math.PI * 2); ctx.fill();
+      const spread = Math.PI * 0.62;
+      const a0 = fx.dir != null ? fx.dir - spread / 2 : 0;
+      const a1 = fx.dir != null ? fx.dir + spread / 2 : Math.PI * 2;
+      // pressure body trailing the front
+      ctx.fillStyle = hexA(fx.color, inv * 0.24);
+      ctx.beginPath();
+      if (fx.dir != null) ctx.moveTo(fx.x, fx.y);
+      ctx.arc(fx.x, fx.y, fx.r * (0.5 + k * 0.6), a0, a1);
+      if (fx.dir != null) ctx.closePath();
+      ctx.fill();
+      // bright leading edge
       ctx.strokeStyle = hexA(fx.color, inv); ctx.lineWidth = 4 * inv + 1;
-      ctx.beginPath(); ctx.arc(fx.x, fx.y, fx.r * (0.6 + k * 0.5), 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(fx.x, fx.y, rr, a0, a1); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${inv * 0.7})`; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(fx.x, fx.y, rr, a0, a1); ctx.stroke();
+    } else if (fx.kind === 'impactFlash') {
+      ctx.globalCompositeOperation = 'lighter';
+      const core = (fx.crit ? 10 : 6) * (0.4 + inv * 0.6);
+      ctx.fillStyle = `rgba(255,255,255,${inv * 0.95})`;
+      ctx.beginPath(); ctx.arc(fx.x, fx.y, core, 0, Math.PI * 2); ctx.fill();
+      // compressed star flash, spokes biased away from the attacker
+      const spokes = fx.crit ? 6 : 4;
+      const bias = fx.dir != null ? fx.dir : 0;
+      ctx.strokeStyle = hexA(fx.color, inv * 0.85); ctx.lineWidth = fx.crit ? 2.5 : 1.75;
+      for (let i = 0; i < spokes; i++) {
+        const a = bias + (i / spokes) * Math.PI * 2;
+        const len = core * (1.7 + inv * 1.5);
+        ctx.beginPath();
+        ctx.moveTo(fx.x + Math.cos(a) * core * 0.3, fx.y + Math.sin(a) * core * 0.3);
+        ctx.lineTo(fx.x + Math.cos(a) * len, fx.y + Math.sin(a) * len);
+        ctx.stroke();
+      }
+    } else if (fx.kind === 'sigil') {
+      ctx.globalCompositeOperation = 'lighter';
+      const collapsing = fx.phase === 'collapse';
+      const openness = collapsing ? inv : Math.min(1, k / 0.4);
+      const bodyH = 60, bodyW = 3 + openness * 15;
+      ctx.save();
+      ctx.translate(fx.x, fx.y);
+      ctx.fillStyle = hexA(fx.color, inv * 0.55 + 0.08);
+      ctx.beginPath(); ctx.ellipse(0, 0, bodyW, bodyH * (0.35 + openness * 0.65), 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(255,255,255,${collapsing ? inv * 0.85 : Math.min(1, k * 3) * 0.7})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(0, -bodyH / 2); ctx.lineTo(0, bodyH / 2); ctx.stroke();
+      ctx.restore();
+      if (!collapsing) {
+        // outward pulse on reconstruction
+        ctx.strokeStyle = hexA(fx.color, inv * 0.65); ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(fx.x, fx.y, 6 + k * 36, 0, Math.PI * 2); ctx.stroke();
+      }
     } else if (fx.kind === 'rectblast') {
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = hexA(fx.color, inv * 0.3);
@@ -3476,15 +3572,37 @@ function drawFx(game, ctx) {
       if (fx.arc < Math.PI * 1.9) { ctx.lineTo(0, 0); ctx.closePath(); }
       ctx.fill(); ctx.stroke();
     } else if (fx.kind === 'bolt') {
-      ctx.strokeStyle = hexA(fx.color, inv); ctx.lineWidth = 3 * inv + 1;
       ctx.globalCompositeOperation = 'lighter';
       const segs = 6;
-      ctx.beginPath(); ctx.moveTo(fx.x1, fx.y1);
+      const pts = [{ x: fx.x1, y: fx.y1 }];
       for (let i = 1; i < segs; i++) {
         const q = i / segs;
-        ctx.lineTo(fx.x1 + (fx.x2 - fx.x1) * q + (Math.random() - 0.5) * 22, fx.y1 + (fx.y2 - fx.y1) * q + (Math.random() - 0.5) * 22);
+        pts.push({
+          x: fx.x1 + (fx.x2 - fx.x1) * q + (Math.random() - 0.5) * 22,
+          y: fx.y1 + (fx.y2 - fx.y1) * q + (Math.random() - 0.5) * 22,
+        });
       }
-      ctx.lineTo(fx.x2, fx.y2); ctx.stroke();
+      pts.push({ x: fx.x2, y: fx.y2 });
+      const path = () => {
+        ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      };
+      // two soft envelopes in the element color, then a brilliant white-hot core
+      ctx.strokeStyle = hexA(fx.color, inv * 0.35); ctx.lineWidth = 9 * inv + 2; path(); ctx.stroke();
+      ctx.strokeStyle = hexA(fx.color, inv * 0.65); ctx.lineWidth = 4.5 * inv + 1.5; path(); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${inv * 0.95})`; ctx.lineWidth = 1.6 * inv + 0.6; path(); ctx.stroke();
+      // short branches forking off the main arc
+      const branches = 2 + Math.floor(Math.random() * 3);
+      ctx.strokeStyle = hexA(fx.color, inv * 0.5); ctx.lineWidth = 1.2;
+      for (let b = 0; b < branches; b++) {
+        const from = pts[1 + Math.floor(Math.random() * (pts.length - 2))];
+        const a = Math.random() * Math.PI * 2;
+        const len = 10 + Math.random() * 16;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(from.x + Math.cos(a) * len, from.y + Math.sin(a) * len);
+        ctx.stroke();
+      }
     } else if (fx.kind === 'streak') {
       ctx.strokeStyle = hexA(fx.color, inv * 0.7); ctx.lineWidth = 10 * inv + 2;
       ctx.lineCap = 'round';

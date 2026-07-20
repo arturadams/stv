@@ -41,7 +41,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
     sustains: [], traps: [],
     relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false,
-    camera: { x: 0, y: 0, shake: 0 },
+    camera: { x: 0, y: 0, shake: 0, impulseX: 0, impulseY: 0 },
     chunks: new Map(),
     portal: null,
     portalRespawnT: 0,
