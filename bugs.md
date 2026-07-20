@@ -1,0 +1,1 @@
+chests sometimes are generated on the pillars.
