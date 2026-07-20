@@ -10,6 +10,7 @@ import { updateSustains } from './entities/sustains.js';
 import { updateTelegraphs } from './entities/telegraphs.js';
 import { updateTraps } from './entities/traps.js';
 import { updateZones } from './entities/zones.js';
+import { updateCoreMechanics } from './effects/coreMechanic.js';
 import { floater } from './fx.js';
 import { CHUNK, biomeOf, chunksNear, worldDef } from './map/chunks.js';
 import { updateWorldFeatures } from './map/features.js';
@@ -52,6 +53,7 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
   chunksNear(game, game.player.x, game.player.y, 3); // keep the world generated ahead
 
   // engine
+  updateCoreMechanics(game, dt);
   const eng = game.engine;
   eng.followPos = { x: game.player.x, y: game.player.y };
   eng.update(dt);

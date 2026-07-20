@@ -2,7 +2,9 @@ import { sfx } from '../../audio.js';
 import { registerEffect } from './registry.js';
 
 registerEffect('power', (game, eff, ctx) => {
-  game.engine.addPower(ctx.def, eff, 1 + 0.15 * (ctx.lvl || 0));
+  const rank = ctx.upgradeRank || 0;
+  const durationScale = rank === 1 ? 1.15 : rank === 2 ? 1.3 : 1;
+  game.engine.addPower(ctx.def, eff, durationScale);
 });
 
 registerEffect('extendPower', (game, eff) => {

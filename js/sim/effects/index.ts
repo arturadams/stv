@@ -1,8 +1,10 @@
 import type { Buffs, CardInstance, EffectCtx, EffectPreview, CardDef } from '../../data/types.js';
-import { nearestEnemy } from '../combat.js';
+import { enemiesIn, hitEnemy, nearestEnemy } from '../combat.js';
 import { colorOf } from '../game.js';
 import type { GameState } from '../types.js';
 import { resolveEffect } from './registry.js';
+import { coreCardDamageMultiplier } from './coreMechanic.js';
+import { talentDamageMultiplier, talentStatusBonuses } from '../run/talents.js';
 
 // registering every effect handler and enchant action is a side effect of
 // importing these modules — this file is the one place that pulls them all
@@ -22,6 +24,8 @@ import './engineOps.js';
 import './mark.js';
 import './summon.js';
 import './enchantActions.js';
+import './coreMechanic.js';
+import './coreSummon.js';
 
 // ═══ channel preview ═══
 export function computePreview(game: GameState, def: CardDef, buffs: Buffs): EffectPreview | null {
@@ -47,13 +51,28 @@ export function computePreview(game: GameState, def: CardDef, buffs: Buffs): Eff
 export function resolveCard(game: GameState, inst: CardInstance, buffs: Buffs, preview: EffectPreview | null): void {
   const def = inst.def;
   const p = game.player;
-  const lvl = inst.lvl || 0; // combined duplicates: +25% damage, +8% area, +15% durations per level
-  let dmgMult = (buffs.dmgMult || 1) * (1 + 0.25 * lvl);
+  const lvl = Math.max(1, Math.min(3, inst.lvl || 1));
+  const upgradeRank = lvl - 1;
+  const damageScale = upgradeRank === 1 ? 1.2 : upgradeRank === 2 ? 1.4 : 1;
+  let dmgMult = (buffs.dmgMult || 1) * damageScale * coreCardDamageMultiplier(game) * talentDamageMultiplier(game, def);
   if (game.hasDuelist && def.school === 'Warrior' && game.engine.queue.length <= 1) dmgMult *= 1.6;
-  const radMult = (buffs.radiusMult || 1) * game.relicRadiusMult * (1 + 0.08 * lvl);
+  const radMult = (buffs.radiusMult || 1) * game.relicRadiusMult * (upgradeRank === 2 ? 1.1 : 1);
   let critBonus = buffs.critChance || 0;
   if (game.playerClass === 'rogue') critBonus += game.engine.flow * 0.024;
-  const ctx: EffectCtx = { def, buffs: { ...buffs, critChance: critBonus }, dmgMult, radMult, preview, lvl };
+  const addStatus = [...(buffs.addStatus || []), ...talentStatusBonuses(game, def)];
+  const flameSigil = (game.core.active.flameSigil || 0) > 0 && def.cat === 'Signature';
+  if (flameSigil) addStatus.push(['burn', 1]);
+  const ctx: EffectCtx = {
+    def, buffs: { ...buffs, addStatus, critChance: critBonus },
+    dmgMult, radMult, preview, lvl, upgradeRank,
+  };
   for (const eff of def.effects) resolveEffect(game, eff, ctx);
+  if (flameSigil && (game.core.cooldowns.flameSigil || 0) <= 0) {
+    const target = nearestEnemy(game, p.x, p.y);
+    if (target) {
+      for (const enemy of enemiesIn(game, target.x, target.y, 55)) hitEnemy(game, enemy, 8, ctx, {});
+      game.core.cooldowns.flameSigil = 2;
+    }
+  }
   game.fx.push({ kind: 'cast', x: p.x, y: p.y, color: colorOf(def), t: 0, life: 0.35 });
 }

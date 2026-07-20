@@ -20,6 +20,7 @@ import type {
   Sanctuary,
   StatusApp,
   SustainedDo,
+  TalentDefinition,
   ZoneRegion,
 } from '../data/types.js';
 import type { CardEngine } from '../engine.js';
@@ -29,7 +30,7 @@ export interface Vec2 {
   y: number;
 }
 
-export type GameMode = 'title' | 'combat' | 'reward' | 'sanctuary' | 'gameover';
+export type GameMode = 'title' | 'combat' | 'reward' | 'talent' | 'sanctuary' | 'gameover';
 
 export interface Input {
   up: boolean;
@@ -280,6 +281,14 @@ export interface PortalState extends Vec2 {
 export interface DeckEntry {
   id: string;
   lvl: number;
+  source?: 'starting' | 'acquired';
+}
+
+export interface ChoiceHistoryEvent {
+  time: number;
+  level: number;
+  source: string;
+  text: string;
 }
 
 // per-class resource-gain bookkeeping — one small bag instead of separate
@@ -293,6 +302,16 @@ export interface ResourceMeters {
   damageTakenCd: number;
   critCd: number;
   hitCount: number;
+}
+
+export interface CoreRuntimeState {
+  active: Record<string, number>;
+  cooldowns: Record<string, number>;
+  challengedUid: number | null;
+  recentCrits: Map<number, number[]>;
+  dooms: Array<{ enemy: EnemyState; t: number; damage: number }>;
+  healing: Array<{ remaining: number; rate: number }>;
+  healAccumulator: number;
 }
 
 export interface GameState {
@@ -310,6 +329,7 @@ export interface GameState {
   player: PlayerState;
   lastCombatT: number;
   resourceMeters: ResourceMeters;
+  core: CoreRuntimeState;
   dashOverride: DashOverride | null;
   enemies: EnemyState[];
   projectiles: Projectile[];
@@ -351,6 +371,13 @@ export interface GameState {
   spawnT: number;
   gold: number;
   sanctuary: Sanctuary | null;
+  chosenTalents: string[];
+  offeredTalents: string[];
+  pendingTalentOptions: TalentDefinition[] | null;
+  choiceHistory: ChoiceHistoryEvent[];
+  runLevel: number;
+  runXp: number;
+  nextLevelXp: number;
   deckIds: DeckEntry[];
   stateLabel: string;
   uiDirty: boolean;

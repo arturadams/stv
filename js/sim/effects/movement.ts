@@ -9,7 +9,7 @@ import { registerEffect } from './registry.js';
 // repositioning cards are not cast — they become your Dash for a while
 registerEffect('dashOverride', (game, eff, ctx) => {
   const p = game.player;
-  const dur = eff.dur * (1 + 0.15 * (ctx.lvl || 0));
+  const dur = eff.dur * (ctx.upgradeRank === 1 ? 1.15 : ctx.upgradeRank === 2 ? 1.3 : 1);
   game.dashOverride = { def: ctx.def, spec: eff.move, timeLeft: dur, dur, color: colorOf(ctx.def) };
   floater(game, p.x, p.y - 34, `DASH → ${ctx.def.name.toUpperCase()}`, colorOf(ctx.def), 13);
   sfx('enchant');

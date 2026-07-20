@@ -67,6 +67,9 @@ export function updatePlayer(game: GameState, dt: number, input: Input): void {
   input.dash = false;
 
   let speed = p.speed;
+  for (const power of game.engine.powers as Array<{ spec: { moveSpeedMult?: number } }>) {
+    if (power.spec.moveSpeedMult) speed *= power.spec.moveSpeedMult;
+  }
   for (const ch of chunksNear(game, p.x, p.y, 1)) {
     for (const pool of ch.pools) {
       if (Math.hypot(p.x - pool.x, p.y - pool.y) < pool.r) speed *= 0.6;

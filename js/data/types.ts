@@ -20,7 +20,14 @@ export type ElementId =
   | 'shadow'
   | 'gold';
 export type StatusName = 'burn' | 'poison' | 'bleed' | 'chill';
-export type Targeting = 'none' | 'self' | 'nearest';
+export type Targeting =
+  | 'none'
+  | 'self'
+  | 'nearest'
+  | 'strongest'
+  | 'target_area'
+  | 'directional'
+  | 'persistent_zone';
 export type QueueOpName =
   | 'duplicateNext'
   | 'reverse'
@@ -72,6 +79,12 @@ export interface PowerSpec {
   element?: ElementId;
   channelMult?: number;
   extendOnHit?: number;
+  damageReduction?: number;
+  moveSpeedMult?: number;
+  signatureChannelMult?: number;
+  healingPerSecond?: number;
+  cardDamageMult?: number;
+  cardLifeSteal?: number;
 }
 
 export interface MoveEmpower {
@@ -212,6 +225,8 @@ export interface AoeEffect {
   knockback?: number;
   shake?: number;
   flowPerHit?: number;
+  flowFlat?: number;
+  flowIfHit?: number;
   atFacing?: number;
   critChance?: number;
 }
@@ -351,7 +366,11 @@ export type EffectSpec =
   | HasteEffect
   | FlowOverTimeEffect
   | MarkEffect
-  | SummonEffect;
+  | SummonEffect
+  | HealthCostEffect
+  | HealOverTimeEffect
+  | ConsumeStatusEffect
+  | CoreMechanicEffect;
 
 export interface CardPreview {
   r: number;
@@ -375,6 +394,15 @@ export interface CardDef {
   element: ElementId;
   text: string;
   effects: readonly EffectSpec[];
+  /** Stable metadata shared by drafts, talents, and the Run Build Board. */
+  classId?: ClassId;
+  branch?: string;
+  secondaryBranch?: string;
+  startingCard?: boolean;
+  draftOnly?: boolean;
+  core?: boolean;
+  keywords?: readonly string[];
+  implementationNotes?: string;
   // pool-exclusion flag: kept in source/registered in CARD_LIST, but hidden
   // from drafts, starting decks, sanctuary stock, and rival/ally card AI —
   // see Card System v2 (rework_cards.md) §17/§24 for the non-destructive
@@ -436,6 +464,7 @@ export interface EffectCtx {
   radMult: number;
   preview: EffectPreview | null;
   lvl: number;
+  upgradeRank?: number;
   basic?: boolean;
 }
 
@@ -478,6 +507,20 @@ export type ClassId =
   | 'necromancer'
   | 'druid'
   | 'warlock';
+
+export interface TalentDefinition {
+  id: string;
+  name: string;
+  classId: ClassId;
+  branch: string;
+  text: string;
+  keywords: readonly string[];
+  effect: {
+    cardDamageMult?: number;
+    maxHealth?: number;
+    statusBonus?: StatusApp;
+  };
+}
 
 export interface BossBanner {
   title: string;
@@ -814,4 +857,50 @@ export interface ZoneRegion extends Point {
   r: number;
   kind: 'boss' | 'duel';
   landmark?: Landmark;
+}
+
+export interface HealthCostEffect {
+  type: 'healthCost';
+  amount: number;
+}
+
+export interface HealOverTimeEffect {
+  type: 'healOverTime';
+  amount: number;
+  dur: number;
+}
+
+export interface ConsumeStatusEffect {
+  type: 'consumeStatus';
+  status: StatusName;
+  maxStacks: number;
+  damagePerStack: number;
+  minStacks?: number;
+  fallbackStacks?: number;
+  retainOnBoss?: number;
+}
+
+/** Complex core-pack mechanics are centralized in one resolver. */
+export interface CoreMechanicEffect {
+  type: 'coreMechanic';
+  id:
+    | 'flameSigil'
+    | 'bloodRage'
+    | 'riposte'
+    | 'challenge'
+    | 'guardedStance'
+    | 'deathmark'
+    | 'toxicDart'
+    | 'silentVerdict'
+    | 'darkSacrifice'
+    | 'graveCommand'
+    | 'deathlyPact'
+    | 'wolfAspect'
+    | 'bearAspect'
+    | 'renewal'
+    | 'bloodPact'
+    | 'doom'
+    | 'hexOfFrailty'
+    | 'apocalypse';
+  dur?: number;
 }

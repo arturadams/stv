@@ -15,7 +15,7 @@ import { makeRng } from './core/rng.js';
 import { runQueueOp } from './engine/queueOps.js';
 
 // Cards carry a level: duplicates combined at a Sanctuary grow stronger.
-export function makeCard(id, lvl = 0, uid = 0) {
+export function makeCard(id, lvl = 1, uid = 0) {
   const def = CARDS[id];
   if (!def) throw new Error('unknown card: ' + id);
   return { uid, def, cost: def.cost, lvl };
@@ -56,12 +56,12 @@ export class CardEngine {
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }
 
-  makeCard(id, lvl = 0) {
+  makeCard(id, lvl = 1) {
     return makeCard(id, lvl, this.cardIds.next());
   }
 
   setDeck(entries) {
-    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl || 0));
+    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl ?? 1));
     this.shuffleArray(this.deck);
     this.discard = []; this.queue = []; this.channel = null;
     this.powers = []; this.flushMode = null; this.gapT = 0;
@@ -223,9 +223,12 @@ export class CardEngine {
     return m;
   }
 
-  powerChannelMult() {
+  powerChannelMult(def) {
     let mult = 1;
-    for (const pw of this.powers) if (pw.spec.channelMult) mult *= pw.spec.channelMult;
+    for (const pw of this.powers) {
+      if (pw.spec.channelMult) mult *= pw.spec.channelMult;
+      if (def?.cat === 'Signature' && pw.spec.signatureChannelMult) mult *= pw.spec.signatureChannelMult;
+    }
     return mult;
   }
 
@@ -301,7 +304,7 @@ export class CardEngine {
       this.startChannel();
     }
     if (this.channel) {
-      this.channel.t += dt * this.hasteMult * (1 / this.powerChannelMult());
+      this.channel.t += dt * this.hasteMult * (1 / this.powerChannelMult(this.channel.inst.def));
       // self-centered previews follow the player
       if (this.channel.preview && this.channel.preview.follow && this.followPos) {
         this.channel.preview.x = this.followPos.x;

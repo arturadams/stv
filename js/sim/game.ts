@@ -8,6 +8,7 @@ import { sfx } from '../audio.js';
 import { computePreview, resolveCard } from './effects/index.js';
 import { runEnchantAction } from './effects/enchantActions.js';
 import type { EnchantPayload, EnchantRef } from './effects/enchantActions.js';
+import { damageEnemy, enemiesIn } from './combat.js';
 import { spark, mote, floater } from './fx.js';
 import { bossCleared } from './map/features.js';
 import { duelVictory } from './run/matchmaking.js';
@@ -36,6 +37,8 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     // class resources — the resource itself lives on engine.flow/maxFlow
     lastCombatT: -Infinity,
     resourceMeters: { regenT: 0, armorBlockCd: 0, damageTakenCd: 0, critCd: 0, hitCount: 0 },
+    core: { active: {}, cooldowns: {}, challengedUid: null, recentCrits: new Map(),
+      dooms: [], healing: [], healAccumulator: 0 },
     dashOverride: null, // a card owning the Dash
     enemies: [], projectiles: [], enemyProjectiles: [], zones: [], hazards: [], telegraphs: [],
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
@@ -56,7 +59,10 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     stolen: null, kills: 0, runTime: 0, campsCleared: 0, bossesSlain: 0, worldBossesSlain: 0, duelsWon: 0,
     spawnT: 1.5,
     gold: 30, sanctuary: null,
-    deckIds: STARTING_DECKS.mage.map((id) => ({ id, lvl: 0 })),
+    deckIds: STARTING_DECKS.mage.map((id) => ({ id, lvl: 1, source: 'starting' as const })),
+    chosenTalents: [], offeredTalents: [], pendingTalentOptions: null,
+    choiceHistory: [],
+    runLevel: 1, runXp: 0, nextLevelXp: 12,
     stateLabel: '',
     uiDirty: true,
   };
@@ -82,6 +88,13 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     engine.gainFlow(CLASSES[game.playerClass].resource.perfectDodgeGain, 'perfect_dodge');
     floater(game, game.player.x, game.player.y - 30, 'PERFECT', '#ffd97a', 18);
     game.slowmo = 0.22;
+    if ((game.core.active.riposte || 0) > 0 && (game.core.cooldowns.riposte || 0) <= 0) {
+      for (const enemy of enemiesIn(game, game.player.x, game.player.y, 120)) {
+        damageEnemy(game, enemy, 24, { color: '#e8dcc0' });
+      }
+      engine.gainFlow(1, 'riposte');
+      game.core.cooldowns.riposte = 1;
+    }
     sfx('perfect');
   });
   bus.on(EVT.trapTriggered, () => {

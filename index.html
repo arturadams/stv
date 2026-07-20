@@ -6,6 +6,7 @@
   <title>Arcana Engine — a real-time deckbuilding roguelite</title>
   <link rel="stylesheet" href="style.css" />
 </head>
+  <link rel="stylesheet" href="build-board.css" />
 <body>
   <canvas id="game"></canvas>
   <div id="vignette"></div>
@@ -89,7 +90,7 @@
       <div id="class-row"></div>
       <div class="title-rules kb-rules">
         <span><b>WASD</b> move</span><span><b>SPACE</b> dash</span>
-        <span><b>P</b> pause</span><span><b>M</b> mute</span>
+        <span><b>P</b> pause</span><span><b>TAB</b> build</span><span><b>M</b> mute</span>
       </div>
       <div class="title-rules touch-rules">
         <span><b>DRAG</b> move</span><span><b>➹</b> dash</span>
@@ -142,6 +143,7 @@
       <div id="pause-stats"></div>
       <div id="pause-buttons">
         <button id="resume-btn">RESUME</button>
+        <button id="pause-build-btn">RUN BUILD</button>
         <button id="mute-btn">MUTE</button>
         <button id="quit-btn">ABANDON RUN</button>
       </div>
@@ -164,6 +166,7 @@
           <div id="sanct-deck"></div>
         </div>
       </div>
+      <button class="build-open-btn">OPEN RUN BUILD</button>
       <button id="leave-btn">RETURN TO THE REALM</button>
     </div>
   </div>
@@ -174,6 +177,7 @@
       <div class="reward-sigil">☩</div>
       <h2 id="reward-heading"></h2>
       <div id="reward-cards"></div>
+      <button class="build-open-btn">OPEN RUN BUILD</button>
       <button id="reward-skip">Decline — rest instead (+15 vitality)</button>
     </div>
   </div>
@@ -187,6 +191,40 @@
       <button id="retry-btn">DRAW AGAIN</button>
     </div>
   </div>
+
+  <!-- Talent selection -->
+  <div id="talent-overlay" class="overlay hidden">
+    <div class="reward-frame">
+      <div class="reward-sigil">✦</div>
+      <h2>LEVEL UP — CHOOSE A TALENT</h2>
+      <div id="talent-options"></div>
+      <button class="build-open-btn">OPEN RUN BUILD</button>
+    </div>
+  </div>
+
+  <!-- Persistent run build board -->
+  <div id="build-overlay" class="overlay hidden">
+    <div class="reward-frame build-frame">
+      <div class="build-head">
+        <div>
+          <div class="reward-sigil">⎘</div>
+          <h2 id="build-title">RUN BUILD</h2>
+        </div>
+        <button id="build-close-btn">CLOSE</button>
+      </div>
+      <div id="build-tabs">
+        <button data-build-tab="deck" class="selected">DECK</button>
+        <button data-build-tab="talents">TALENTS</button>
+        <button data-build-tab="synergies">SYNERGIES</button>
+        <button data-build-tab="history">CHOICE HISTORY</button>
+      </div>
+      <div id="build-deck" class="build-panel"></div>
+      <div id="build-talents" class="build-panel hidden"></div>
+      <div id="build-synergies" class="build-panel hidden"></div>
+      <div id="build-history" class="build-panel hidden"></div>
+    </div>
+  </div>
+
 
   <script type="module" src="js/main.js"></script>
 </body>

@@ -12,6 +12,7 @@ import { floater, impact, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
 import { spawnEnemy } from './entities/spawn.js';
+import { gainRunXp } from './run/talents.js';
 import type { CombatCtx, GameState } from './types.js';
 import type { FeatureState } from './map/features.js';
 
@@ -70,7 +71,7 @@ export interface HitSpec {
 // damagePlayer reads from `engine.powers` (extendOnHit-on-hit power refresh).
 interface PowerRef {
   timeLeft: number;
-  spec: { extendOnHit?: number };
+  spec: { extendOnHit?: number; damageReduction?: number; cardLifeSteal?: number };
 }
 
 export function targetable(enemy: EnemyState): boolean {
@@ -288,6 +289,7 @@ export function killEnemy(
       campCleared(game, enemy.campRef);
     }
   }
+  if (!enemy.def.minion) gainRunXp(game, 1);
   game.bus.emit(EVT.enemyKilled, { enemy, x: enemy.x, y: enemy.y });
 }
 
@@ -309,6 +311,32 @@ export function damagePlayer(
   }
   game.lastCombatT = game.runTime;
   let damage = amount;
+  for (const power of game.engine.powers as PowerRef[]) {
+    if (power.spec.damageReduction) damage *= 1 - power.spec.damageReduction;
+  }
+  if ((game.core.active.deathlyPact || 0) > 0 &&
+      (amount >= 12 || player.hp - damage < player.maxHp * 0.25)) {
+    if (game.summons.length > 0) {
+      let oldest = 0;
+      for (let i = 1; i < game.summons.length; i++) {
+        if (game.summons[i].t > game.summons[oldest].t) oldest = i;
+      }
+      const summon = game.summons.splice(oldest, 1)[0];
+      for (const enemy of enemiesIn(game, summon.x, summon.y, 100)) {
+        damageEnemy(game, enemy, 16, { color: '#a77ac7' });
+      }
+      damage *= 0.3;
+    } else {
+      damage *= 0.7;
+    }
+    delete game.core.active.deathlyPact;
+  }
+  if ((game.core.active.guardedStance || 0) > 0 && amount >= 10 &&
+      (game.core.cooldowns.guardedStance || 0) <= 0) {
+    for (const enemy of enemiesIn(game, player.x, player.y, 130)) damageEnemy(game, enemy, 12, { color: '#ffd97a' });
+    game.engine.gainFlow(1, 'guarded_stance');
+    game.core.cooldowns.guardedStance = 2;
+  }
   if (player.armor > 0) {
     const absorbed = Math.min(player.armor, damage);
     player.armor -= absorbed;
@@ -359,6 +387,28 @@ export function hitEnemy(
     critChance += enemy.mark.crit;
   }
   const crit = game.rng.chance(critChance);
+  if (crit) {
+    const history = game.core.recentCrits.get(enemy.uid) || [];
+    history.push(game.runTime);
+    game.core.recentCrits.set(enemy.uid, history);
+  }
+  if (context.basic && game.playerClass === 'warrior' &&
+      (game.core.active.bloodRage || 0) > 0 && (game.core.cooldowns.bloodRage || 0) <= 0) {
+    game.engine.gainFlow(1, 'blood_rage');
+    game.core.cooldowns.bloodRage = 1;
+  }
+  if (context.basic && (game.playerClass === 'mage' || game.playerClass === 'warlock')) {
+    game.resourceMeters.hitCount += 1;
+    const threshold = game.playerClass === 'mage' ? 4 : 3;
+    if (game.resourceMeters.hitCount >= threshold) {
+      game.resourceMeters.hitCount = 0;
+      game.engine.gainFlow(1, game.playerClass === 'mage' ? 'arcane_bolt' : 'eldritch_bolt');
+    }
+  }
+  if (!context.basic) {
+    const steal = (game.engine.powers as PowerRef[]).reduce((sum, power) => sum + (power.spec.cardLifeSteal || 0), 0);
+    if (steal > 0) game.player.hp = Math.min(game.player.maxHp, game.player.hp + rawDamage * context.dmgMult * steal);
+  }
   if (crit && game.playerClass === 'rogue' && game.resourceMeters.critCd <= 0) {
     game.engine.gainFlow(1, 'critical_hit');
     game.resourceMeters.critCd = 2;

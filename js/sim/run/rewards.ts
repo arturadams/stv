@@ -4,6 +4,7 @@ import { sfx } from '../../audio.js';
 import type { GameState, Reward } from '../types.js';
 import { canAcquireCard } from './lifecycle.js';
 import { metaUnlockedWorld } from './meta.js';
+import { recordChoice } from './talents.js';
 
 const relicDefs: Record<string, RelicDef> = RELICS;
 
@@ -94,7 +95,8 @@ export function applyReward(game: GameState, choice: CardDef | RelicDef | null):
   }
   if (choice && game.pendingReward) {
     if (game.pendingReward.type === 'card') {
-      game.deckIds.push({ id: choice.id, lvl: 0 });
+      recordChoice(game, 'Draft', 'Added ' + choice.name);
+      game.deckIds.push({ id: choice.id, lvl: 1, source: 'acquired' });
       game.engine.deck.push(game.engine.makeCard(choice.id));
       game.engine.shuffleArray(game.engine.deck);
     } else {

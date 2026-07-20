@@ -6,6 +6,7 @@ import type { DeckEntry, GameState } from '../types.js';
 import { canAcquireCard } from './lifecycle.js';
 import { draftWeight } from './rewards.js';
 
+import { recordChoice } from './talents.js';
 // ═══ sanctuaries: rest, trade, and combine duplicate cards ═══
 export const CARD_PRICES: Record<Rarity, number> = {
   Common: 25, Uncommon: 40, Rare: 70, Legendary: 120,
@@ -14,7 +15,7 @@ export const MAX_CARD_LVL = 3;
 
 export function sellPrice(entry: DeckEntry): number {
   const def = CARDS[entry.id];
-  return Math.floor(CARD_PRICES[def.rarity] / 2) + (entry.lvl || 0) * 15;
+  return Math.floor(CARD_PRICES[def.rarity] / 2) + Math.max(0, (entry.lvl || 1) - 1) * 15;
 }
 
 // The merchant's stock is small and seeded: the same sanctuary always offers
@@ -62,7 +63,8 @@ export function buyCard(game: GameState, idx: number): boolean {
   if (!canAcquireCard(game.deckIds, def.id)) return false;
   game.gold -= price;
   s.stock.splice(idx, 1);
-  game.deckIds.push({ id: def.id, lvl: 0 });
+  recordChoice(game, 'Sanctuary', 'Added ' + def.name);
+  game.deckIds.push({ id: def.id, lvl: 1, source: 'acquired' });
   game.uiDirty = true;
   sfx('reward');
   return true;
@@ -70,7 +72,7 @@ export function buyCard(game: GameState, idx: number): boolean {
 
 export function sellCard(game: GameState, id: string, lvl: number): boolean {
   if (game.deckIds.length <= 6) return false; // never sell below a playable deck
-  const i = game.deckIds.findIndex((e) => e.id === id && (e.lvl || 0) === lvl);
+  const i = game.deckIds.findIndex((e) => e.id === id && (e.lvl || 1) === lvl);
   if (i < 0) return false;
   game.gold += sellPrice(game.deckIds[i]);
   game.deckIds.splice(i, 1);
@@ -84,9 +86,10 @@ export function combineCards(game: GameState, id: string, lvl: number): boolean 
   if (lvl >= MAX_CARD_LVL) return false;
   const idxs: number[] = [];
   game.deckIds.forEach((e, i) => {
-    if (e.id === id && (e.lvl || 0) === lvl) idxs.push(i);
+    if (e.id === id && (e.lvl || 1) === lvl) idxs.push(i);
   });
   if (idxs.length < 2) return false;
+  recordChoice(game, 'Sanctuary', 'Upgraded ' + CARDS[id].name + ' to Level ' + (lvl + 1));
   game.deckIds.splice(idxs[1], 1);
   game.deckIds[idxs[0]].lvl = lvl + 1;
   game.uiDirty = true;

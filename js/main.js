@@ -1,7 +1,7 @@
 // ── Arcana Engine · entry point ────────────────────────────────────────────
 import { createGame, updateGame } from './world.js';
 import { render } from './render.js';
-import { initUI, updateUI } from './ui.js';
+import { initUI, updateUI, isBuildBoardOpen, toggleBuildBoard } from './ui.js';
 import { initAudio, toggleMute } from './audio.js';
 import { initTouch } from './touch.js';
 
@@ -55,8 +55,13 @@ window.addEventListener('keydown', (e) => {
   const k = KEYMAP[e.code];
   if (k) { input[k] = true; e.preventDefault(); }
   if (e.code === 'Space') { input.dash = true; e.preventDefault(); }
+  if (e.code === 'Tab' && game.state !== 'title') {
+    toggleBuildBoard(game);
+    e.preventDefault();
+  }
   if (e.code === 'KeyP' || e.code === 'Escape') {
-    if (game.state === 'combat') setPaused(!paused);
+    if (e.code === 'Escape' && isBuildBoardOpen()) toggleBuildBoard(game);
+    else if (game.state === 'combat') setPaused(!paused);
   }
   if (e.code === 'KeyM') setMuted(toggleMute());
   if (e.code === 'Enter' && game.state === 'title') {
@@ -89,7 +94,7 @@ function frame(now) {
   last = now;
   dt = Math.min(dt, 0.05); // clamp tab-switch spikes
 
-  if (!paused) updateGame(game, dt, input);
+  if (!paused && !isBuildBoardOpen()) updateGame(game, dt, input);
 
   render(game, ctx, window.innerWidth, window.innerHeight);
   updateUI(game);

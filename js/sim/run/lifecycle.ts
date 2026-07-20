@@ -10,8 +10,8 @@ import { recordWorldReached } from './meta.js';
 // Deck-size rules — Card System v2 (rework_cards.md) §10.2: 12-card cap,
 // max 2 copies of any one card. `sellCard` (sanctuary.ts) enforces the
 // matching 6-card floor.
-const MAX_DECK_SIZE = 12;
-const MAX_CARD_COPIES = 2;
+export const MAX_DECK_SIZE = 12;
+export const MAX_CARD_COPIES = 2;
 
 export function canAcquireCard(deckIds: readonly DeckEntry[], id: string): boolean {
   if (deckIds.length >= MAX_DECK_SIZE) return false;
@@ -58,7 +58,7 @@ export function rollStartingDeck(
       }
     }
     copies.set(pick.id, (copies.get(pick.id) || 0) + 1);
-    deck.push({ id: pick.id, lvl: 0 });
+    deck.push({ id: pick.id, lvl: 1, source: 'starting' });
     return pick;
   };
   // playability guarantees (prefer Common, fall back to any drafted rarity
@@ -86,7 +86,7 @@ export interface PreparedRun {
 
 // Shown before the run so the player can see the fixed hand and pick a world.
 export function prepareRun(_game: Pick<GameState, 'rng'>, classId: ClassId, world = 1): PreparedRun {
-  const deck = STARTING_DECKS[classId].map((id) => ({ id, lvl: 0 }));
+  const deck = STARTING_DECKS[classId].map((id) => ({ id, lvl: 1, source: 'starting' as const }));
   return { classId, world, deck };
 }
 
@@ -100,8 +100,8 @@ export function startRun(game: GameState, classId: ClassId = 'mage', opts: Start
   game.playerClass = classId;
   game.world = Math.min(Math.max(opts.world || 1, 1), WORLDS.length);
   recordWorldReached(game.world);
-  const deck = opts.deck || STARTING_DECKS[classId].map((id) => ({ id, lvl: 0 }));
-  game.deckIds = deck.map((e) => typeof e === 'string' ? { id: e, lvl: 0 } : { id: e.id, lvl: e.lvl || 0 });
+  const deck = opts.deck || STARTING_DECKS[classId].map((id) => ({ id, lvl: 1, source: 'starting' as const }));
+  game.deckIds = deck.map((e) => typeof e === 'string' ? { id: e, lvl: 1, source: 'starting' as const } : { id: e.id, lvl: e.lvl || 1, source: e.source || 'starting' });
   game.gold = 30;
   game.sanctuary = null;
   game.relics = [];
@@ -115,14 +115,21 @@ export function startRun(game: GameState, classId: ClassId = 'mage', opts: Start
   game.bossesSlain = 0;
   game.worldBossesSlain = 0;
   game.duelsWon = 0;
+  game.chosenTalents = [];
+  game.offeredTalents = [];
+  game.pendingTalentOptions = null;
+  game.choiceHistory = [];
   game.lastCombatT = -Infinity;
   game.resourceMeters = { regenT: 0, armorBlockCd: 0, damageTakenCd: 0, critCd: 0, hitCount: 0 };
+  game.core = { active: {}, cooldowns: {}, challengedUid: null, recentCrits: new Map(),
+    dooms: [], healing: [], healAccumulator: 0 };
   game.dashOverride = null;
   game.worldSeed = opts.seed ?? game.rng.int(0x7fffffff);
   game.chunks = new Map();
   game.portal = null;
   game.portalRespawnT = 0;
-  game.player.hp = game.player.maxHp;
+  game.player.maxHp = 100;
+  game.player.hp = 100;
   game.player.armor = 0;
   game.player.x = CHUNK / 2;
   game.player.y = CHUNK / 2;
@@ -213,4 +220,10 @@ export function advanceWorld(game: GameState, opts: AdvanceWorldOpts = {}): void
   game.banner = { title: w.name, sub: `${w.sub} — the realm grows crueler`, t: 3.2 };
   game.uiDirty = true;
   sfx('victory');
+}
+
+export function canReplaceCard(deckIds: readonly DeckEntry[], id: string, replaceIndex: number): boolean {
+  if (replaceIndex < 0 || replaceIndex >= deckIds.length) return false;
+  const copiesAfterReplacement = deckIds.filter((entry, index) => index !== replaceIndex && entry.id === id).length;
+  return copiesAfterReplacement < MAX_CARD_COPIES;
 }

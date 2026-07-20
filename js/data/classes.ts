@@ -6,7 +6,7 @@ export const CLASSES = {
     id: 'mage', name: 'Mage', school: 'Mage', color: '#8f6fff', glyph: '✦',
     tagline: 'Arcane bolts · Mana · Ritual spells',
     desc: 'Fires arcane bolts on its own. MANA regenerates steadily in combat and fuels the big ritual spells — the bolt is a finisher, not the main event.',
-    basic: { kind: 'proj', name: 'Arcane Bolt', dmg: 6, rate: 0.55, speed: 600, radius: 5, range: 470, element: 'arcane' },
+    basic: { kind: 'proj', name: 'Arcane Bolt', dmg: 4, rate: 0.60, speed: 600, radius: 5, range: 470, element: 'arcane' },
     resource: { key: 'mana', name: 'MANA', max: 10, starting: 6, regenInterval: 1.1, perfectDodgeGain: 2, color: '#8f6fff' },
   },
   warrior: {
@@ -28,7 +28,7 @@ export const CLASSES = {
     tagline: 'Bone shards · Undead servants · Souls',
     desc: 'Hurls splinters of grave-bone. SOULS regenerate in combat and surge with every kill, fueling curses, grave control and undead servants.',
     basic: { kind: 'proj', name: 'Bone Shard', dmg: 7, rate: 0.62, speed: 560, radius: 5, range: 460, element: 'shadow' },
-    resource: { key: 'souls', name: 'SOULS', max: 10, starting: 4, regenInterval: 1.9, perfectDodgeGain: 1, color: '#c69be8', pips: true },
+    resource: { key: 'souls', name: 'SOULS', max: 10, starting: 4, regenInterval: 2.2, perfectDodgeGain: 1, color: '#c69be8', pips: true },
   },
   druid: {
     id: 'druid', name: 'Druid', school: 'Druid', color: '#76b852', glyph: '❧',
@@ -42,6 +42,6 @@ export const CLASSES = {
     tagline: 'Eldritch bolts · Curses · Corruption',
     desc: 'Casts hungry bolts from the outer dark. CORRUPTION regenerates in combat and rises through bolt hits and suffered wounds, fueling curses and demons.',
     basic: { kind: 'proj', name: 'Eldritch Bolt', dmg: 8, rate: 0.72, speed: 520, radius: 7, range: 500, element: 'shadow' },
-    resource: { key: 'corruption', name: 'CORRUPTION', max: 10, starting: 4, regenInterval: 1.9, perfectDodgeGain: 1, color: '#ee6fbd' },
+    resource: { key: 'corruption', name: 'CORRUPTION', max: 10, starting: 4, regenInterval: 2, perfectDodgeGain: 1, color: '#ee6fbd' },
   },
 } satisfies Record<ClassId, ClassDef>;
