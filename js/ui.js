@@ -225,12 +225,12 @@ export function updateUI(game) {
   const rt = Math.floor(game.runTime || 0);
   els.clock.textContent = `${Math.floor(rt / 60)}:${String(rt % 60).padStart(2, '0')}`;
 
-  // class resource (Rage / Opportunity)
+  // class resource
   const res = (cls || {}).resource;
   if (res && game.state !== 'title') {
     els.resWrap.classList.remove('hidden');
     els.resLabel.textContent = res.name;
-    const val = res.key === 'rage' ? game.rage : game.opportunity;
+    const val = game[res.key] || 0;
     els.resFill.style.width = `${(val / res.max) * 100}%`;
     els.resFill.style.background = res.color;
     els.resText.textContent = res.pips ? `${Math.floor(val)} / ${res.max}` : `${Math.floor(val)}`;

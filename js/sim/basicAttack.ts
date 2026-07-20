@@ -4,7 +4,7 @@ import type { ArcBasic, ElementId, ProjBasic, ProjectileSpec, StatusApp } from '
 import { wrapAngle } from '../core/math.js';
 import { sfx } from '../audio.js';
 import { hitEnemy, nearestEnemy, spawnPlayerProj, targetable } from './combat.js';
-import { gainRage } from './player.js';
+import { gainRage, gainSpirit } from './player.js';
 import type { GameState } from './types.js';
 
 // CardEngine itself isn't typed until R3.6 — this narrows just the shape
@@ -42,6 +42,9 @@ export function updateBasicAttack(game: GameState, dt: number): void {
 
   let dmgMult = mods.dmgMult;
   if (game.playerClass === 'warrior') dmgMult *= 1 + game.rage / 200; // Rage empowers swings
+  if (game.playerClass === 'necromancer') dmgMult *= 1 + game.souls * 0.04;
+  if (game.playerClass === 'druid') dmgMult *= 1 + game.spirit / 400;
+  if (game.playerClass === 'warlock') dmgMult *= 1 + game.corruption / 200;
   let critBonus = 0;
   if (game.playerClass === 'rogue') critBonus += game.opportunity * 0.03;
   if (p.empower) {
@@ -53,6 +56,7 @@ export function updateBasicAttack(game: GameState, dt: number): void {
   const ang = Math.atan2(target.y - p.y, target.x - p.x);
   p.facing = ang;
   p.basicCount++;
+  gainSpirit(game, 5);
 
   if (base.kind === 'arc') {
     // melee swing

@@ -6,7 +6,7 @@ A real-time deckbuilding action roguelite prototype.
 > An endless cursed realm; your hero fights on their own — your deck transforms *how*.
 
 You control movement and the Dash. Each class has a **basic attack that is not
-a card** (Mage bolt / Warrior slash / Rogue knife) — the constant action layer.
+a card** — the constant action layer.
 The card engine runs itself on top of it:
 **Deck → Draw → Queue → Channel / Stay Active → Resolve → Discard → Shuffle.**
 Cards are slower, readable combat events, not bullets (see `roadmap.md`).
@@ -41,11 +41,14 @@ Then open http://localhost:8123. (ES modules require a server; opening
 - **Meta progression** — reaching a world once permanently unlocks its card
   set (localStorage): those cards then have a chance to appear in earlier
   worlds' drafts, shops and starting hands.
-- **3 classes** with distinct basic attacks and mechanics:
+- **6 classes** with distinct basic attacks and mechanics:
   - **Mage** — arcane bolts; Attunement Powers transform them (fire/frost/storm)
   - **Warrior** — melee arcs; **Rage** from combat speeds Warrior card channels
   - **Rogue** — fast knives; **Opportunity** from kills/traps/dodges quickens Rogue cards
-- **77 data-driven cards** (every school spans Common → Legendary) in six behaviors: **Power** (4–10s active, modifies
+  - **Necromancer** — bone shards and undead servants; kills become **Souls** that empower attacks and quicken rites
+  - **Druid** — feral claws and shapeshifting; attacks build **Spirit** that accelerates Druid cards
+  - **Warlock** — eldritch bolts and curses; **Corruption** grants power and speed until it triggers backlash
+- **154 data-driven cards** (every school spans Common → Legendary) in six behaviors: **Power** (4–10s active, modifies
   the basic attack), **Skill**, **Sustained Spell** (2–3s continuous casting),
   **AoE Spell** (rune-circle channel → one impact), **Trigger**, **Engine**.
   No card has bespoke logic; all flow through the effect resolver.
@@ -92,6 +95,6 @@ js/main.js    loop + input
 ```
 
 `world.js` touches no DOM, so the entire game simulates headlessly in Node —
-the smoke tests in development ran full runs per class and exercised all 57
+the smoke tests in development run full simulations for every class and exercise all 154
 cards, both encounter paths (duel & party), the fallback guardian, and a
 boss gate, end to end.

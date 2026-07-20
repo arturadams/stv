@@ -1,4 +1,5 @@
 import { createGame, startRun, updateGame } from '../../js/world.js';
+import type { ClassId } from '../../js/data/types.js';
 
 export type HeadlessGame = ReturnType<typeof createGame>;
 
@@ -12,7 +13,7 @@ export interface HeadlessInput {
 
 export function makeHeadlessGame(
   seed: number,
-  classId: 'mage' | 'warrior' | 'rogue' = 'mage',
+  classId: ClassId = 'mage',
   world = 1,
 ): HeadlessGame {
   const game = createGame({ seed });

@@ -17,7 +17,9 @@ export const PALETTE = {
 };
 
 export const SCHOOL_COLORS = {
-  Mage: '#8f6fff', Warrior: '#d05648', Rogue: '#4fbf7a', Colorless: '#d9b45b',
+  Mage: '#8f6fff', Warrior: '#d05648', Rogue: '#4fbf7a',
+  Necromancer: '#a77ac7', Druid: '#76b852', Warlock: '#d05c9b',
+  Colorless: '#d9b45b',
 };
 
 export const ELEMENT_COLORS = {

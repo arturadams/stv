@@ -63,6 +63,8 @@ export function updateGame(game: GameState, dt: number, input: Input): void {
   // class resources
   if (game.rageDecayT > 0) game.rageDecayT -= dt;
   else if (game.rage > 0) game.rage = Math.max(0, game.rage - 4 * dt);
+  if (game.corruptionDecayT > 0) game.corruptionDecayT -= dt;
+  else if (game.corruption > 0) game.corruption = Math.max(0, game.corruption - 6 * dt);
 
   // the card that owns the Dash counts down
   if (game.dashOverride) {

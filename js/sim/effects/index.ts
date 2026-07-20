@@ -17,6 +17,7 @@ import './arc.js';
 import './chain.js';
 import './movement.js';
 import './defense.js';
+import './heal.js';
 import './engineOps.js';
 import './mark.js';
 import './summon.js';
@@ -49,6 +50,9 @@ export function resolveCard(game: GameState, inst: CardInstance, buffs: Buffs, p
   const lvl = inst.lvl || 0; // combined duplicates: +25% damage, +8% area, +15% durations per level
   let dmgMult = (buffs.dmgMult || 1) * (1 + 0.25 * lvl);
   if (game.hasDuelist && def.school === 'Warrior' && game.engine.queue.length <= 1) dmgMult *= 1.6;
+  if (game.playerClass === 'warlock' && def.school === 'Warlock') {
+    dmgMult *= 1 + game.corruption / 150;
+  }
   const radMult = (buffs.radiusMult || 1) * game.relicRadiusMult * (1 + 0.08 * lvl);
   let critBonus = buffs.critChance || 0;
   if (game.playerClass === 'rogue') critBonus += game.opportunity * 0.03;

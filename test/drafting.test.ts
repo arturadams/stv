@@ -10,6 +10,9 @@ const SCHOOL = {
   mage: 'Mage',
   warrior: 'Warrior',
   rogue: 'Rogue',
+  necromancer: 'Necromancer',
+  druid: 'Druid',
+  warlock: 'Warlock',
 } as const;
 
 describe('starting deck rules', () => {
@@ -17,6 +20,9 @@ describe('starting deck rules', () => {
     ['mage', 11],
     ['warrior', 22],
     ['rogue', 33],
+    ['necromancer', 44],
+    ['druid', 55],
+    ['warlock', 66],
   ] as const)('rolls a valid %s starting deck', (classId, seed) => {
     const deck = readDeckEntries(rollStartingDeck(classId, 1, 1, makeRng(seed)));
     const defs = deck.map((entry) => cardDef(entry.id));

@@ -10,7 +10,7 @@ import { runEnchantAction } from './effects/enchantActions.js';
 import type { EnchantPayload, EnchantRef } from './effects/enchantActions.js';
 import { spark, mote, floater } from './fx.js';
 import { bossCleared } from './map/features.js';
-import { classChannelMult, gainOpportunity } from './player.js';
+import { classChannelMult, gainCorruption, gainOpportunity } from './player.js';
 import { duelVictory } from './run/matchmaking.js';
 import type { GameState } from './types.js';
 
@@ -36,6 +36,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     },
     // class resources
     rage: 0, rageDecayT: 0, opportunity: 0,
+    souls: 0, spirit: 0, corruption: 0, corruptionDecayT: 0,
     dashOverride: null, // a card owning the Dash
     enemies: [], projectiles: [], enemyProjectiles: [], zones: [], hazards: [], telegraphs: [],
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
@@ -72,6 +73,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
   bus.on(EVT.cardResolved, ({ inst }) => {
     sfx('resolve', inst.def.element);
     spark(game, game.player.x, game.player.y, colorOf(inst.def), 6, 90);
+    if (inst.def.school === 'Warlock') gainCorruption(game, 12);
   });
   bus.on(EVT.cardDrawn, () => sfx('draw'));
   bus.on(EVT.flowGained, ({ amount }) => {

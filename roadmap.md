@@ -41,6 +41,12 @@ No card resolves in under 0.3s unless it is a modifier/engine.
 - **Rogue** — auto knives. Poison/bleed Powers, ground traps, mobility.
   **Opportunity** (kills, poison kills, perfect dodges, trap triggers) quickens
   Rogue cards and feeds crits.
+- **Necromancer** — auto bone shards. Kills grant **Souls** that strengthen
+  basic attacks and are spent to quicken Necromancer rites and summons.
+- **Druid** — auto claw arcs. Attacks build **Spirit**, spent to speed Druid
+  cards; shapeshifts, roots, storms and renewal control the battlefield.
+- **Warlock** — auto eldritch bolts. Warlock cards build **Corruption**, which
+  strengthens attacks and quickens channels until a damaging backlash fires.
 
 ## World
 
@@ -120,7 +126,7 @@ pause while you rest. Stepping onto the hearth opens the sanctuary:
 1. ✅ Basic attack layer (class bolt / slash / knife — not cards)
 2. ✅ Slower card types (Power / Skill / Sustained / AoE / Trigger / Engine)
 3. ✅ Active card visibility (active slot, pop, badges, duration bars)
-4. ✅ Class mechanics (Attunements, Rage, Opportunity)
+4. ✅ Class mechanics (Attunements, Rage, Opportunity, Souls, Spirit, Corruption)
 5. ✅ Infinite procedural map (chunks, biomes, camps, shrines, boss gates)
 6. ✅ Matchmaking encounter (rival souls, featured cards, Fight / Party Up)
 7. ✅ Matchmaking fallback boss (guardian awakens on timeout)

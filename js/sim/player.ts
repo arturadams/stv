@@ -11,7 +11,16 @@ import type { DashOverride, GameState, Input } from './types.js';
 
 type ResourceState = Pick<GameState, 'playerClass' | 'rage' | 'rageDecayT'>;
 type OpportunityState = Pick<GameState, 'playerClass' | 'opportunity' | 'player'> & FxState;
-type ChannelMultState = Pick<GameState, 'playerClass' | 'rage' | 'opportunity' | 'player'> & FxState;
+type SoulState = Pick<GameState, 'playerClass' | 'souls' | 'player'> & FxState;
+type SpiritState = Pick<GameState, 'playerClass' | 'spirit'>;
+type CorruptionState = Pick<
+  GameState,
+  'playerClass' | 'corruption' | 'corruptionDecayT' | 'player' | 'state' | 'hitstop'
+> & FxState;
+type ChannelMultState = Pick<
+  GameState,
+  'playerClass' | 'rage' | 'opportunity' | 'souls' | 'spirit' | 'corruption' | 'player'
+> & FxState;
 
 // ═══ class resources ═══
 export function gainRage(game: ResourceState, n: number): void {
@@ -29,6 +38,38 @@ export function gainOpportunity(game: OpportunityState, n: number): void {
   }
 }
 
+export function gainSouls(game: SoulState, n: number): void {
+  if (game.playerClass !== 'necromancer') return;
+  const before = game.souls;
+  game.souls = Math.min(CLASSES.necromancer.resource.max, game.souls + n);
+  if (game.souls > before) {
+    floater(game, game.player.x, game.player.y - 34, '+SOUL', '#c69be8', 11);
+  }
+}
+
+export function gainSpirit(game: SpiritState, n: number): void {
+  if (game.playerClass !== 'druid') return;
+  game.spirit = Math.min(CLASSES.druid.resource.max, game.spirit + n);
+}
+
+export function gainCorruption(game: CorruptionState, n: number): void {
+  if (game.playerClass !== 'warlock') return;
+  game.corruption = Math.min(CLASSES.warlock.resource.max, game.corruption + n);
+  game.corruptionDecayT = 4;
+  if (game.corruption < CLASSES.warlock.resource.max) return;
+
+  game.corruption = 35;
+  game.player.hp = Math.max(0, game.player.hp - 8);
+  game.hitstop = Math.max(game.hitstop, 0.06);
+  floater(game, game.player.x, game.player.y - 34, '-8 BACKLASH', '#ee6fbd', 14);
+  shake(game, 8);
+  sfx('hurt');
+  if (game.player.hp <= 0) {
+    game.state = 'gameover';
+    sfx('death');
+  }
+}
+
 export function classChannelMult(game: ChannelMultState, def: CardDef): number {
   if (game.playerClass === 'warrior' && def.school === 'Warrior' && game.rage > 0) {
     return 1 / (1 + (game.rage / 100) * 0.8); // up to 80% faster at full Rage
@@ -37,6 +78,19 @@ export function classChannelMult(game: ChannelMultState, def: CardDef): number {
     game.opportunity -= 1; // spend a stack to quicken the card
     floater(game, game.player.x, game.player.y - 30, 'QUICKENED', '#8ade6a', 12);
     return 0.6;
+  }
+  if (game.playerClass === 'necromancer' && def.school === 'Necromancer' && game.souls > 0) {
+    game.souls -= 1;
+    floater(game, game.player.x, game.player.y - 30, 'SOULBOUND', '#c69be8', 12);
+    return 0.68;
+  }
+  if (game.playerClass === 'druid' && def.school === 'Druid' && game.spirit > 0) {
+    const spent = Math.min(25, game.spirit);
+    game.spirit -= spent;
+    return 1 - spent * 0.016; // up to 40% faster for 25 Spirit
+  }
+  if (game.playerClass === 'warlock' && def.school === 'Warlock' && game.corruption > 0) {
+    return 1 - (game.corruption / 100) * 0.4;
   }
   return 1;
 }

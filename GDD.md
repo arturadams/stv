@@ -6,7 +6,7 @@
 >
 > Run it: `npm start` (Vite dev server). Every number in this document is sourced from the game's data files (`js/data/*`) and simulation code — file references included. A shareable web version with the same content lives at <https://claude.ai/code/artifact/e616607d-01a9-47fd-b265-d03c56cbe223>.
 
-**At a glance:** 3 classes · 109 cards · 5 worlds · 12 bosses · 30 field enemies · 8 relics · 16 biomes
+**At a glance:** 6 classes · 154 cards · 5 worlds · 12 bosses · 30 field enemies · 8 relics · 16 biomes
 
 | § | Section |
 |---|---|
@@ -16,7 +16,7 @@
 | 4 | [Classes & basic attacks](#4--classes--basic-attacks) |
 | 5 | [Combat math](#5--combat-math) |
 | 6 | [The two economies](#6--the-two-economies) |
-| 7 | [Card library](#7--card-library--109-cards) |
+| 7 | [Card library](#7--card-library--154-cards) |
 | 8 | [Relics](#8--relics--permanent-run-modifiers) |
 | 9 | [Worlds, threat & the map](#9--worlds-threat--the-procedural-map) |
 | 10 | [Enemy roster](#10--enemy-roster) |
@@ -39,14 +39,14 @@
 **Session shape.** Endless-realm structure rather than stage-based: infinite procedural map per world, three boss gates to fall before the portal onward opens, difficulty ("threat") that never resets. A run ends only in death; meta-progression persists which worlds — and therefore which card sets — you have reached.
 
 ![Title screen](docs/img/01-title.jpg)
-*Title screen. Class select is the first decision of a run: Mage / Warrior / Rogue, each with its basic attack and resource summarized up front.*
+*Title screen. Class select is the first decision of a run; each class has its basic attack and resource summarized up front.*
 
 **Design pillars** (from `roadmap.md`, enforced in code):
 
 - **Cards shape the fight; they don't replace every hit.** The basic attack is the constant action layer and is explicitly not a card.
 - **Readable rhythm.** No card resolves in under 0.3s unless it is a modifier/engine; every resolve is followed by a 0.55s "breath"; big spells telegraph with rune-circle previews.
 - **No waiting screens.** Matchmaking that fails produces a guardian fight; a missed portal re-manifests near the player; drafts happen in-world.
-- **Class identity through mechanics**, not stat deltas: Attunements transform, Rage accelerates, Opportunity quickens.
+- **Class identity through mechanics**, not stat deltas: Attunements transform, Rage accelerates, Opportunity quickens, Souls empower, Spirit cycles, and Corruption bargains.
 
 ## 2 · Run structure & core loop
 
@@ -104,6 +104,12 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | **Basic attack** | Arcane Bolt — 6 dmg · every 0.55s · range 470 · 600 u/s | Blade Swing — 10 dmg · every 0.8s · reach 125 · 100° arc · knockback 60 | Swift Knife — 5 dmg · every 0.4s · range 430 · 780 u/s · 10% base crit |
 | **Resource** | None — Mage state is *which Attunement Powers are active*: fire (exploding bolts + Burn), frost (Chill), storm (chain lightning), plus later phoenix / tide / resonant variants. Elemental Cycle rotates them for free. | **RAGE (0–100)**: +2 per swing +2 per target hit, +6 per close kill (<170 px), +10 when damaged, +4 when armor blocks. Decays 4/s after 2.5s. Warrior cards channel up to **80% faster** at full Rage; swings hit up to **+50%** harder. | **OPPORTUNITY (0–8 pips)**: +1 per kill (+2 if poisoned), +1 per perfect dodge, +1 per trap trigger. Each Rogue card *spends one pip* to channel at 0.6× time; every held pip adds +3% crit to basics. |
 
+| | ☠ Necromancer | ❧ Druid | ⛧ Warlock |
+|---|---|---|---|
+| **Identity** | Bone shards · Undead servants · Souls | Wild claws · Shapeshifting · Spirit | Eldritch bolts · Curses · Corruption |
+| **Basic attack** | Bone Shard — 7 dmg · every 0.62s · range 460 · 560 u/s | Wild Claw — 9 dmg · every 0.7s · reach 115 · 90° arc · knockback 45 | Eldritch Bolt — 8 dmg · every 0.72s · range 500 · 520 u/s |
+| **Resource** | **SOULS (0–10 pips)**: +1 per kill, +3 per boss. Each pip adds +4% basic damage; Necromancer cards spend one Soul to channel at 0.68× time. | **SPIRIT (0–100)**: +5 per basic attack. Druid cards spend up to 25 Spirit to channel up to 40% faster; held Spirit adds up to +25% basic damage. | **CORRUPTION (0–100)**: +12 per Warlock card. It adds up to +50% basic damage, +67% card damage, and 40% faster channels; at 100 it deals 8 backlash damage and resets to 35. Decays after 4s. |
+
 **Fixed starting decks** (pre-roll reference — the rolled hand replaces these in normal play; they remain the deterministic default used by tests and as the template of "playable": 2 Powers, a Spell, a Skill, plus engine glue):
 
 | Class | Deck (10 cards) |
@@ -111,6 +117,9 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | **Mage** | Flame Attunement, Flame Attunement, Frost Nova, Arc Lightning, Mana Burst, Teleport, Frost Attunement, Draw, Battery, Quickcast |
 | **Warrior** | Cleaving Stance, Cleaving Stance, Charge, Whirlwind, Shield Wall, Thunder Hammer, Iron Skin, Draw, Battery, Stabilize |
 | **Rogue** | Poisoned Blades, Poisoned Blades, Springblade Trap, Fan of Knives, Shadowstep, Smoke Bomb, Deathmark, Draw, Battery, Quickcast |
+| **Necromancer** | Bone Legion, Bone Legion, Raise Dead, Plague Ground, Bone Spear, Grave Grasp, Grave Miasma, Draw, Battery, Quickcast |
+| **Druid** | Wolf Aspect, Wolf Aspect, Entangling Roots, Hurricane, Pounce, Barkskin, Bear Aspect, Draw, Battery, Quickcast |
+| **Warlock** | Fel Infusion, Fel Infusion, Shadow Barrage, Hellfire, Demon Skin, Fear, Cursed Bolts, Draw, Battery, Quickcast |
 
 ## 5 · Combat math
 
@@ -162,17 +171,20 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | Card prices | 25 / 40 / 70 / 120 | Common / Uncommon / Rare / Legendary at any merchant. |
 | Selling | ½ price + 15·★ | Never below a 6-card deck. |
 
-## 7 · Card library — 109 cards
+## 7 · Card library — 154 cards
 
-Every card is pure data flowing through one effect resolver (`js/sim/effects/`) — no card has bespoke logic, which is why the library scaled to 109 without code growth. The base library is 60 cards; each authored world adds a 16–17 card set (4 per school + Colorless) that only becomes obtainable on arrival there and stays meta-unlocked afterwards (§14).
+Every card is pure data flowing through one effect resolver (`js/sim/effects/`) — no card has bespoke logic, which is why the library scaled to 154 without one-off card code. The base library is 105 cards; authored worlds add themed card sets that only become obtainable on arrival there and stay meta-unlocked afterwards (§14).
 
 | School | Common | Uncommon | Rare | Legendary | Total |
 |---|---:|---:|---:|---:|---:|
 | Mage | 10 | 11 | 6 | 1 | **28** |
 | Warrior | 10 | 11 | 4 | 1 | **26** |
 | Rogue | 9 | 13 | 5 | 1 | **28** |
+| Necromancer | 7 | 5 | 2 | 1 | **15** |
+| Druid | 6 | 6 | 2 | 1 | **15** |
+| Warlock | 6 | 6 | 2 | 1 | **15** |
 | Colorless | 8 | 13 | 2 | 4 | **27** |
-| **Total** | 37 | 48 | 17 | 7 | **109** |
+| **Total** | 56 | 65 | 23 | 10 | **154** |
 
 ![Card draft](docs/img/04-draft.jpg)
 *A draft. Three weighted options (§14); declining is a real choice — "rest instead" heals +15 HP.*

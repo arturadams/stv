@@ -291,6 +291,10 @@ export interface GameState {
   rage: number;
   rageDecayT: number;
   opportunity: number;
+  souls: number;
+  spirit: number;
+  corruption: number;
+  corruptionDecayT: number;
   dashOverride: DashOverride | null;
   enemies: EnemyState[];
   projectiles: Projectile[];

@@ -1,6 +1,13 @@
 import type { EventMap } from '../core/events.js';
 
-export type School = 'Mage' | 'Warrior' | 'Rogue' | 'Colorless';
+export type School =
+  | 'Mage'
+  | 'Warrior'
+  | 'Rogue'
+  | 'Necromancer'
+  | 'Druid'
+  | 'Warlock'
+  | 'Colorless';
 export type Cat = 'Power' | 'Skill' | 'Spell' | 'Trigger' | 'Engine' | 'Modifier';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Legendary';
 export type ElementId =
@@ -260,6 +267,11 @@ export interface ArmorEffect {
   amount: number;
 }
 
+export interface HealEffect {
+  type: 'heal';
+  amount: number;
+}
+
 export interface StabilizeEffect {
   type: 'stabilize';
   low: number;
@@ -330,6 +342,7 @@ export type EffectSpec =
   | BlinkEffect
   | DashAttackEffect
   | ArmorEffect
+  | HealEffect
   | StabilizeEffect
   | DrawEffect
   | QueueOpEffect
@@ -453,7 +466,13 @@ export type BehaviorId =
   | 'boss_silence'
   | 'rival';
 
-export type ClassId = 'mage' | 'warrior' | 'rogue';
+export type ClassId =
+  | 'mage'
+  | 'warrior'
+  | 'rogue'
+  | 'necromancer'
+  | 'druid'
+  | 'warlock';
 
 export interface BossBanner {
   title: string;
@@ -649,7 +668,7 @@ export interface ProjBasic extends BasicAttack {
 }
 
 export interface ClassResource {
-  key: 'rage' | 'opportunity';
+  key: 'rage' | 'opportunity' | 'souls' | 'spirit' | 'corruption';
   name: string;
   max: number;
   color: string;

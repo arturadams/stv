@@ -8,7 +8,7 @@ import type {
 } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { sfx } from '../audio.js';
-import { gainOpportunity, gainRage } from './player.js';
+import { gainOpportunity, gainRage, gainSouls } from './player.js';
 import { floater, ringFx, shake, spark } from './fx.js';
 import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
@@ -39,6 +39,7 @@ export type CombatState = FeatureState & Pick<
   | 'rage'
   | 'rageDecayT'
   | 'opportunity'
+  | 'souls'
   | 'projectiles'
 >;
 
@@ -267,6 +268,7 @@ export function killEnemy(
     gainRage(game, 6);
   }
   gainOpportunity(game, enemy.statuses.poison ? 2 : 1);
+  gainSouls(game, enemy.def.boss ? 3 : 1);
 
   if (enemy.campRef) {
     enemy.campRef.alive -= 1;
