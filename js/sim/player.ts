@@ -3,7 +3,7 @@ import { EVT } from '../core/events.js';
 import { distToSegment } from '../core/math.js';
 import { sfx } from '../audio.js';
 import { applyStatus, hitEnemy, isActiveCombat, nearestEnemy, targetable } from './combat.js';
-import { floater, shake, spark } from './fx.js';
+import { floater, shake, sigil, spark } from './fx.js';
 import { chunksNear, clampToRegion } from './map/chunks.js';
 import type { DashOverride, GameState, Input } from './types.js';
 
@@ -124,7 +124,9 @@ export function performOverrideDash(game: GameState, ov: DashOverride): void {
   p.iframes = Math.max(p.iframes, 0.35);
   p.dashT = 0.1;
   p.dashDir = { x: 0, y: 0 }; // grazing projectiles still count as perfect dodges
-  spark(game, x0, y0, ov.color, 10, 140);
+  // collapse into a thin vertical sigil, leaving a fading afterimage
+  if (s.kind === 'blink') sigil(game, x0, y0, ov.color, 'collapse');
+  else spark(game, x0, y0, ov.color, 10, 140);
   p.x += dir.x * s.dist;
   p.y += dir.y * s.dist;
   clampToRegion(game, p);
@@ -142,7 +144,8 @@ export function performOverrideDash(game: GameState, ov: DashOverride): void {
       p.empower = { ...s.empower };
       floater(game, p.x, p.y - 30, 'EMPOWERED', ov.color, 12);
     }
-    spark(game, p.x, p.y, ov.color, 10, 140);
+    // reconstruct with an outward pulse
+    sigil(game, p.x, p.y, ov.color, 'reconstruct');
     sfx('blink');
   } else {
     // charge: damage and drag everything along the path
