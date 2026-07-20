@@ -160,7 +160,11 @@ export function buildCardEl(def, size, lvl = 0) {
 }
 
 // which class resource a card's cost is paid in — Card System v2 §6
-const RESOURCE_LABEL = { Mage: 'MANA', Warrior: 'RAGE', Rogue: 'FOCUS', Colorless: 'COST' };
+const RESOURCE_LABEL = {
+  Mage: 'MANA', Warrior: 'RAGE', Rogue: 'FOCUS',
+  Necromancer: 'SOULS', Druid: 'SPIRIT', Warlock: 'CORRUPTION',
+  Colorless: 'COST',
+};
 
 function tooltipHTML(def) {
   const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;

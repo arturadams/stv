@@ -1,6 +1,13 @@
 import type { EventMap } from '../core/events.js';
 
-export type School = 'Mage' | 'Warrior' | 'Rogue' | 'Colorless';
+export type School =
+  | 'Mage'
+  | 'Warrior'
+  | 'Rogue'
+  | 'Necromancer'
+  | 'Druid'
+  | 'Warlock'
+  | 'Colorless';
 export type Cat = 'Power' | 'Technique' | 'Signature';
 export type Rarity = 'Common' | 'Uncommon' | 'Rare' | 'Legendary';
 export type ElementId =
@@ -260,6 +267,11 @@ export interface ArmorEffect {
   amount: number;
 }
 
+export interface HealEffect {
+  type: 'heal';
+  amount: number;
+}
+
 export interface StabilizeEffect {
   type: 'stabilize';
   low: number;
@@ -330,6 +342,7 @@ export type EffectSpec =
   | BlinkEffect
   | DashAttackEffect
   | ArmorEffect
+  | HealEffect
   | StabilizeEffect
   | DrawEffect
   | QueueOpEffect
@@ -458,7 +471,13 @@ export type BehaviorId =
   | 'boss_silence'
   | 'rival';
 
-export type ClassId = 'mage' | 'warrior' | 'rogue';
+export type ClassId =
+  | 'mage'
+  | 'warrior'
+  | 'rogue'
+  | 'necromancer'
+  | 'druid'
+  | 'warlock';
 
 export interface BossBanner {
   title: string;
@@ -654,13 +673,14 @@ export interface ProjBasic extends BasicAttack {
 }
 
 export interface ClassResource {
-  key: 'mana' | 'rage' | 'focus';
+  key: 'mana' | 'rage' | 'focus' | 'souls' | 'spirit' | 'corruption';
   name: string;
   max: number;
   starting: number;
   // seconds per +1 passive tick while in active combat — see player.ts's
   // tickResourceRegen and combat.ts's isActiveCombat.
   regenInterval: number;
+  perfectDodgeGain: number;
   color: string;
   pips?: boolean;
 }

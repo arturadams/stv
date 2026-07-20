@@ -95,7 +95,7 @@ const mage = {
     range: 470,
     element: 'arcane',
   },
-  resource: { key: 'mana', name: 'MANA', max: 10, starting: 6, regenInterval: 1.1, color: '#8f6fff' },
+  resource: { key: 'mana', name: 'MANA', max: 10, starting: 6, regenInterval: 1.1, perfectDodgeGain: 2, color: '#8f6fff' },
 } satisfies ClassDef;
 
 const warrior = {
@@ -116,7 +116,7 @@ const warrior = {
     element: 'physical',
     knockback: 60,
   },
-  resource: { key: 'rage', name: 'RAGE', max: 10, starting: 3, regenInterval: 2.5, color: '#ff6a4a' },
+  resource: { key: 'rage', name: 'RAGE', max: 10, starting: 3, regenInterval: 2.5, perfectDodgeGain: 1, color: '#ff6a4a' },
 } satisfies ClassDef;
 
 const biome = {

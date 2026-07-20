@@ -2,13 +2,10 @@
 // Classes, cards, relics, enemies, biomes. Everything is data; behavior lives
 // in the effect resolver (world.js). No card has one-off hardcoded logic.
 //
-// Card categories (the new rhythm — see roadmap.md):
-//   Power     — channels briefly, then stays ACTIVE 4–10s modifying the basic attack
-//   Skill     — fast tactical action (0.3–0.7s channel)
-//   Spell     — big moment: either an AoE channel (1.5–2.5s) or a Sustained cast
-//   Trigger   — reacts to events for ~25–30s
-//   Engine    — queue / Flow / duration manipulation
-//   Modifier  — buffs the next matching card(s)
+// Player-facing Card System v2 categories:
+//   Power      — temporary character state
+//   Technique  — fast defense, movement, setup, or targeted action
+//   Signature  — major offensive or control event
 
 export const PALETTE = {
   navy: '#0b0e1d', navyDeep: '#070912', parchment: '#e8dcc0', ivory: '#f2ead6',
@@ -17,7 +14,9 @@ export const PALETTE = {
 };
 
 export const SCHOOL_COLORS = {
-  Mage: '#8f6fff', Warrior: '#d05648', Rogue: '#4fbf7a', Colorless: '#d9b45b',
+  Mage: '#8f6fff', Warrior: '#d05648', Rogue: '#4fbf7a',
+  Necromancer: '#a77ac7', Druid: '#76b852', Warlock: '#d05c9b',
+  Colorless: '#d9b45b',
 };
 
 export const ELEMENT_COLORS = {

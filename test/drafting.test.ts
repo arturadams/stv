@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { makeRng } from '../js/core/rng.js';
 import { draftWeight } from '../js/sim/run/rewards.js';
+import { STARTING_DECKS } from '../js/data/index.js';
 import { resetMetaProgress, rollStartingDeck, startRun } from '../js/world.js';
 import { cardDef, readDeckEntries } from './helpers/data.js';
 import { makeHeadlessGame } from './helpers/headless.js';
@@ -10,9 +11,21 @@ const SCHOOL = {
   mage: 'Mage',
   warrior: 'Warrior',
   rogue: 'Rogue',
+  necromancer: 'Necromancer',
+  druid: 'Druid',
+  warlock: 'Warlock',
 } as const;
 
 describe('starting deck rules', () => {
+  it.each(Object.entries(STARTING_DECKS))('%s has a fixed, enabled eight-card starting deck', (_classId, ids) => {
+    const counts = new Map<string, number>();
+    for (const id of ids) counts.set(id, (counts.get(id) ?? 0) + 1);
+
+    expect(ids).toHaveLength(8);
+    expect(ids.every((id) => !cardDef(id).disabled)).toBe(true);
+    expect(Math.max(...counts.values())).toBeLessThanOrEqual(2);
+  });
+
   // Superseded by the fixed decks in STARTING_DECKS (Card System v2 §15) —
   // rollStartingDeck is no longer on the default run-start path, but stays
   // in source for a possible future draft-style mode, so its own shape
@@ -21,6 +34,9 @@ describe('starting deck rules', () => {
     ['mage', 11],
     ['warrior', 22],
     ['rogue', 33],
+    ['necromancer', 44],
+    ['druid', 55],
+    ['warlock', 66],
   ] as const)('rolls a valid %s starting deck', (classId, seed) => {
     const deck = readDeckEntries(rollStartingDeck(classId, 1, 1, makeRng(seed)));
     const defs = deck.map((entry) => cardDef(entry.id));
@@ -28,7 +44,7 @@ describe('starting deck rules', () => {
     const counts = new Map<string, number>();
     for (const entry of deck) counts.set(entry.id, (counts.get(entry.id) ?? 0) + 1);
 
-    // The curated 30-card core library (§17) leaves each school with only a
+    // The curated 60-card core library (§17) leaves each school with only a
     // handful of live Commons, so the historical exact 10-card/2-copy-cap
     // roll can no longer always fill up — bound it instead of pinning it.
     expect(deck.length).toBeGreaterThan(0);
@@ -48,7 +64,7 @@ describe('draft weighting', () => {
     const game = makeHeadlessGame(44, 'mage', 1);
 
     // 'draw' (Colorless) and 'shield_wall' (Warrior) are both outside the
-    // curated 30-card core library (Card System v2 §17) and disabled.
+    // curated 60-card core library (Card System v2 §17) and disabled.
     expect(draftWeight(game, cardDef('draw'))).toBe(0);
     expect(draftWeight(game, cardDef('shield_wall'))).toBe(0);
     game.hasCrossClass = true;

@@ -1,4 +1,4 @@
-import { ELEMENT_COLORS, SCHOOL_COLORS, STARTING_DECKS } from '../data/index.js';
+import { CLASSES, ELEMENT_COLORS, SCHOOL_COLORS, STARTING_DECKS } from '../data/index.js';
 import type { Buffs, CardDef, CardInstance, EffectPreview, EnchantDo } from '../data/types.js';
 import { CardEngine } from '../engine.js';
 import { EVT, EventBus } from '../core/events.js';
@@ -79,8 +79,7 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     }
   });
   bus.on(EVT.perfectDodge, () => {
-    // §7-9's per-class perfect-dodge table: Mage/Rogue +2, Warrior +1.
-    engine.gainFlow(game.playerClass === 'warrior' ? 1 : 2, 'perfect_dodge');
+    engine.gainFlow(CLASSES[game.playerClass].resource.perfectDodgeGain, 'perfect_dodge');
     floater(game, game.player.x, game.player.y - 30, 'PERFECT', '#ffd97a', 18);
     game.slowmo = 0.22;
     sfx('perfect');

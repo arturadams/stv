@@ -540,7 +540,10 @@ button:hover {
 #end-stats { display: flex; gap: 22px; justify-content: center; font-size: 13px; color: var(--gold); margin: 6px 0 30px; letter-spacing: 1px; flex-wrap: wrap; }
 
 /* ═══ class selection ═══ */
-#class-row { display: flex; gap: 16px; justify-content: center; margin: 4px 0 20px; }
+#class-row {
+  display: flex; flex-wrap: wrap; gap: 16px; justify-content: center;
+  max-width: 720px; margin: 4px auto 20px;
+}
 .class-card {
   width: 208px; padding: 16px 14px 12px;
   text-align: center; cursor: pointer;

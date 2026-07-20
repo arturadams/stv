@@ -278,6 +278,9 @@ export function killEnemy(
   if (game.playerClass === 'rogue' && enemy.statuses.poison) {
     game.engine.gainFlow(1, 'poisoned_kill');
   }
+  if (game.playerClass === 'necromancer') {
+    game.engine.gainFlow(1, 'kill');
+  }
 
   if (enemy.campRef) {
     enemy.campRef.alive -= 1;
@@ -324,7 +327,10 @@ export function damagePlayer(
   game.hitstop = Math.max(game.hitstop, 0.05);
   sfx('hurt');
   player.iframes = Math.max(player.iframes, 0.5);
-  if (game.playerClass === 'warrior' && game.resourceMeters.damageTakenCd <= 0) {
+  if (
+    (game.playerClass === 'warrior' || game.playerClass === 'warlock') &&
+    game.resourceMeters.damageTakenCd <= 0
+  ) {
     game.engine.gainFlow(1, 'damage_taken');
     game.resourceMeters.damageTakenCd = 2;
   }

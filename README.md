@@ -6,7 +6,7 @@ A real-time deckbuilding action roguelite prototype.
 > An endless cursed realm; your hero fights on their own — your deck transforms *how*.
 
 You control movement and the Dash. Each class has a **basic attack that is not
-a card** (Mage bolt / Warrior slash / Rogue knife) — the constant action layer.
+a card** — the constant action layer.
 The card engine runs itself on top of it:
 **Deck → Draw → Queue → Channel / Stay Active → Resolve → Discard → Shuffle.**
 Cards are slower, readable combat events, not bullets (see `roadmap.md`).
@@ -34,29 +34,31 @@ Then open http://localhost:8123. (ES modules require a server; opening
 
 ## What's in the prototype
 
-- **Rolled starting hands** — every run begins with 9 randomized Commons +
-  1 Uncommon (class-focused, playability-guaranteed), shown on a setup
-  screen before the run, with reroll and **world selection** (play any of
-  the five worlds directly).
+- **Fixed starting decks** — every class begins with a curated eight-card
+  deck, shown on the setup screen alongside **world selection** (play any
+  reached world directly). Decks are capped at 12 cards and two copies.
 - **Meta progression** — reaching a world once permanently unlocks its card
   set (localStorage): those cards then have a chance to appear in earlier
-  worlds' drafts, shops and starting hands.
-- **3 classes** with distinct basic attacks and mechanics:
-  - **Mage** — arcane bolts; Attunement Powers transform them (fire/frost/storm)
-  - **Warrior** — melee arcs; **Rage** from combat speeds Warrior card channels
-  - **Rogue** — fast knives; **Opportunity** from kills/traps/dodges quickens Rogue cards
-- **77 data-driven cards** (every school spans Common → Legendary) in six behaviors: **Power** (4–10s active, modifies
-  the basic attack), **Skill**, **Sustained Spell** (2–3s continuous casting),
-  **AoE Spell** (rune-circle channel → one impact), **Trigger**, **Engine**.
-  No card has bespoke logic; all flow through the effect resolver.
+  worlds' drafts and shops.
+- **6 classes** with distinct basic attacks and mechanics:
+  - **Mage** — reliable **Mana**, ritual Signatures, and bolt-enhancing Powers
+  - **Warrior** — melee arcs; engagement builds **Rage** for stances and shockwaves
+  - **Rogue** — fast knives; crits, traps, poisoned kills, and dodges build **Focus**
+  - **Necromancer** — bone shards, grave control, and undead servants; kills build **Souls**
+  - **Druid** — feral claws and shapeshifting; close attacks and dodges build **Spirit**
+  - **Warlock** — eldritch bolts, curses, and demons; bolt hits and wounds build **Corruption**
+- **154 registered data-driven cards**, with a focused **60-card v2 pool**:
+  ten enabled cards per class and only three player-facing types—**Power**,
+  **Technique**, and **Signature**. Disabled legacy cards remain in source
+  while the new resource model is balanced.
 - **Worlds** — beating a boss gate opens a portal to the next of five realms.
   World II (**The Ember Wastes**) is fully authored: new biomes, a new boss
   (The Cinder Sovereign), harder enemy mechanics (death-bursts, telegraphed
   artillery, phase-shifting stalkers, chained lunges, summoner elites), and
   a **16-card set that only unlocks there**. Worlds III–V are declared with
   rising threat and reuse World II content until authored.
-- **Flow economy** — shards, perfect dodges, staying near danger, combos,
-  shrines. Drawing never grants Flow.
+- **Class-resource economy** — one named 0–10 bar per class, passive income
+  in active combat, and additional gains from class-specific play.
 - **Infinite procedural map** — chunk-generated, 4 biomes, enemy camps, Flow
   shrines, treasure caches, hazard pools, **boss gates** (sealed arenas with
   relic rewards), ambient pressure scaling with time and distance.
@@ -70,9 +72,9 @@ Then open http://localhost:8123. (ES modules require a server; opening
   loser's cards**) or **Party Up** (they fight beside you; enemy pressure
   scales). If no rival answers, *a guardian awakens instead* — never a
   waiting screen.
-- **Readability layer** — active card slot with progress, card pop on cast,
-  power badges with duration bars, queue-front glow, channel previews with
-  clock loaders, trap outlines, duel-zone walls.
+- **Readability layer** — current card plus the next two, card pop on cast,
+  power badges with duration bars, channel previews, trap outlines, and
+  duel-zone walls.
 - **Reward drafts & relics** — drafts are class-focused for synergy (mostly
   your school + some Colorless; other schools only via the Prismatic Codex
   relic or duel spoils); relics from boss gates.
@@ -92,6 +94,6 @@ js/main.js    loop + input
 ```
 
 `world.js` touches no DOM, so the entire game simulates headlessly in Node —
-the smoke tests in development ran full runs per class and exercised all 57
+the smoke tests in development run full simulations for every class and exercise all 154
 cards, both encounter paths (duel & party), the fallback guardian, and a
 boss gate, end to end.

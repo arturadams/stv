@@ -56,6 +56,15 @@ export function updateProjectiles(game: GameState, dt: number): void {
           game.engine.gainFlow(1, 'basic_hit');
         }
       }
+      // Warlock corruption builds through contact with the outer dark:
+      // every fourth landed Eldritch Bolt restores one point.
+      if (pr.ctx.basic && game.playerClass === 'warlock') {
+        game.resourceMeters.hitCount += 1;
+        if (game.resourceMeters.hitCount >= 4) {
+          game.resourceMeters.hitCount -= 4;
+          game.engine.gainFlow(1, 'basic_hit');
+        }
+      }
       if (pr.eff.chainOnHit && !e.dead) chainFrom(game, e, pr.eff.chainOnHit, pr.ctx, pr.x, pr.y);
       if (pr.eff.explode) {
         const ex = pr.eff.explode;

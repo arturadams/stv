@@ -23,7 +23,13 @@ registerBehavior<RivalState>('rival', {
     const p = t.p;
     const { dist, ux, uy, spd, rooted } = t;
     const cls = e.cls || 'mage';
-    const band = cls === 'warrior' ? [120, 220] : cls === 'rogue' ? [200, 320] : [260, 400];
+    const melee = cls === 'warrior' || cls === 'druid';
+    const band = cls === 'warrior' ? [120, 220]
+      : cls === 'druid' ? [105, 205]
+      : cls === 'rogue' ? [200, 320]
+      : cls === 'necromancer' ? [240, 370]
+      : cls === 'warlock' ? [280, 420]
+      : [260, 400];
 
     // movement: hold the distance band, strafe
     state.strafeT -= dt;
@@ -73,9 +79,10 @@ registerBehavior<RivalState>('rival', {
     // basic attacks per class — readable projectile speeds
     state.attackT -= dt;
     if (state.attackT <= 0 && !state.casting) {
-      if (cls === 'warrior') {
-        if (dist < 170) {
-          state.attackT = 1.5;
+      if (melee) {
+        const reach = cls === 'druid' ? 145 : 170;
+        if (dist < reach) {
+          state.attackT = cls === 'druid' ? 1.15 : 1.5;
           const ex = e.x;
           const ey = e.y;
           const ang = Math.atan2(p.y - ey, p.x - ex);
@@ -84,19 +91,22 @@ registerBehavior<RivalState>('rival', {
             onDone: (g) => {
               const hx = ex + Math.cos(ang) * 90;
               const hy = ey + Math.sin(ang) * 90;
-              if (Math.hypot(g.player.x - hx, g.player.y - hy) < 90 + g.player.r) damagePlayer(g, 14, hx, hy);
+              const damage = cls === 'druid' ? 11 : 14;
+              if (Math.hypot(g.player.x - hx, g.player.y - hy) < 90 + g.player.r) damagePlayer(g, damage, hx, hy);
               g.fx.push({ kind: 'arc', x: ex, y: ey, ang, arc: 1.6, range: 150, color: e.def.glow, t: 0, life: 0.25 });
               sfx('slash');
             },
           });
         } else state.attackT = 0.4;
       } else {
-        state.attackT = cls === 'rogue' ? 1.0 : 1.4;
+        state.attackT = cls === 'rogue' ? 1.0 : cls === 'necromancer' ? 1.25 : 1.4;
         const a = Math.atan2(p.y - e.y, p.x - e.x);
-        const speed = cls === 'rogue' ? 420 : 310;
+        const speed = cls === 'rogue' ? 420 : cls === 'warlock' ? 340 : 310;
+        const radius = cls === 'rogue' ? 6 : cls === 'necromancer' ? 7 : 9;
+        const damage = cls === 'rogue' ? 8 : cls === 'warlock' ? 12 : 11;
         game.enemyProjectiles.push({
           x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed,
-          r: cls === 'rogue' ? 6 : 9, dmg: cls === 'rogue' ? 8 : 11, color: e.def.glow, t: 0,
+          r: radius, dmg: damage, color: e.def.glow, t: 0,
         });
         sfx('efire');
       }

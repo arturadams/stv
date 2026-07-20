@@ -17,6 +17,7 @@ import './arc.js';
 import './chain.js';
 import './movement.js';
 import './defense.js';
+import './heal.js';
 import './engineOps.js';
 import './mark.js';
 import './summon.js';

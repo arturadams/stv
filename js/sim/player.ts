@@ -8,7 +8,7 @@ import { chunksNear, clampToRegion } from './map/chunks.js';
 import type { DashOverride, GameState, Input } from './types.js';
 
 // ═══ class resources ═══
-// The single per-class resource (Mana/Rage/Focus) lives on `game.engine`
+// The single per-class resource (Mana/Rage/Focus/Souls/Spirit/Corruption) lives on `game.engine`
 // (flow/maxFlow) — see Card System v2 (rework_cards.md) §6-9. This just
 // ticks passive regen while in active combat and cools down the per-class
 // gain cooldowns tracked in `game.resourceMeters` (see combat.ts's gain

@@ -17,11 +17,14 @@ This proposal rebuilds Arcana Engine's card library and resource economy around 
 
 The current queue and engine manipulation mechanics create too much cognitive load during real-time combat. Effects such as drawing, copying, shuffling, purging, repeating, accelerating, and modifying future cards require the player to monitor an automatic system they cannot directly control.
 
-The new system removes most player-facing queue manipulation and reduces the initial library to 30 focused cards:
+The new system removes most player-facing queue manipulation and reduces the initial library to 60 focused cards:
 
 - 10 Mage cards
 - 10 Warrior cards
 - 10 Rogue cards
+- 10 Necromancer cards
+- 10 Druid cards
+- 10 Warlock cards
 - No Colorless cards in the initial prototype
 - No card-draw or queue-manipulation cards
 
@@ -112,6 +115,9 @@ The rebuild prioritizes a smaller set where every card has:
 - Make the Mage primarily powerful through spells.
 - Make the Warrior primarily powerful through direct combat pressure.
 - Make the Rogue primarily powerful through precision and setup.
+- Make the Necromancer primarily powerful through kills, control, and summons.
+- Make the Druid primarily powerful through close combat, forms, and battlefield control.
+- Make the Warlock primarily powerful through ranged pressure, curses, and dangerous positioning.
 - Reduce the amount of card-system information shown during combat.
 - Make builds recognizable from battlefield behavior.
 - Ensure every card can be understood from a short description and visible effect.
@@ -233,6 +239,9 @@ Each class receives one primary card resource.
 | Mage | Mana | Reliable regeneration and powerful spells |
 | Warrior | Rage | Generated through aggressive close combat |
 | Rogue | Focus | Generated through precision, traps, and dodges |
+| Necromancer | Souls | Reliable regeneration accelerated by kills |
+| Druid | Spirit | Reliable regeneration accelerated by close combat |
+| Warlock | Corruption | Reliable regeneration accelerated by bolt hits and suffered wounds |
 
 All resources use a 0–10 scale for UI consistency.
 
@@ -365,6 +374,91 @@ The Rogue should have a more irregular casting rhythm than the Mage but more rel
 
 ---
 
+## 9A. Necromancer Rebuild
+
+### 9A.1 Necromancer identity
+
+> The Necromancer turns defeated enemies into momentum and uses that momentum to control space or build an undead army.
+
+Souls are a casting resource, not a second consumable layered over the card engine. Kills accelerate the resource bar but passive generation keeps the class functional against bosses.
+
+### 9A.2 Proposed Necromancer statistics
+
+| Property | Proposed value |
+|---|---:|
+| Basic attack damage | 7 |
+| Basic attack interval | 0.62 seconds |
+| Maximum Souls | 10 |
+| Starting Souls | 4 |
+| Passive Souls generation | +1 every 1.9 seconds during combat |
+| Enemy kill | +1 Soul |
+| Perfect dodge | +1 Soul |
+
+### 9A.3 Necromancer combat loop
+
+> Control a group → secure kills → gain Souls → summon allies or occupy more ground
+
+The class should gain a noticeable cadence advantage in swarms without becoming unable to cast in a single-target encounter.
+
+---
+
+## 9B. Druid Rebuild
+
+### 9B.1 Druid identity
+
+> The Druid alternates between feral close combat, resilient forms, and large natural effects.
+
+Spirit rewards landing claws and precise dodges. It remains the only Druid resource; forms do not create a second meter.
+
+### 9B.2 Proposed Druid statistics
+
+| Property | Proposed value |
+|---|---:|
+| Basic attack damage | 9 |
+| Basic attack interval | 0.70 seconds |
+| Maximum Spirit | 10 |
+| Starting Spirit | 5 |
+| Passive Spirit generation | +1 every 1.6 seconds during combat |
+| Melee generation | +1 after three successful claw hits |
+| Perfect dodge | +2 Spirit |
+
+### 9B.3 Druid combat loop
+
+> Enter melee in the right form → build Spirit → root or scatter a group → recover and re-engage
+
+The Druid should have a steady baseline with a clear reward for accepting melee risk.
+
+---
+
+## 9C. Warlock Rebuild
+
+### 9C.1 Warlock identity
+
+> The Warlock maintains ranged pressure and gains Corruption faster by landing bolts or surviving danger.
+
+Corruption is a normal 0–10 casting resource. The former 0–100 buildup, passive card-damage multiplier, channel multiplier, and automatic backlash are removed.
+
+### 9C.2 Proposed Warlock statistics
+
+| Property | Proposed value |
+|---|---:|
+| Basic attack damage | 8 |
+| Basic attack interval | 0.72 seconds |
+| Maximum Corruption | 10 |
+| Starting Corruption | 4 |
+| Passive Corruption generation | +1 every 1.9 seconds during combat |
+| Basic attack bonus | Every fourth successful bolt grants +1 Corruption |
+| Taking health damage | +1 Corruption, maximum once every 2 seconds |
+| Perfect dodge | +1 Corruption |
+
+### 9C.3 Warlock combat loop
+
+> Apply ranged pressure → gain Corruption → establish a curse or burning zone → survive while it works
+
+The Warlock receives a reward for dangerous play without requiring self-damage or a punitive resource reset.
+
+---
+
 ## 10. Simplified Deck Rules
 
 ### 10.1 Starting deck
@@ -427,15 +521,18 @@ The resource bar should visually indicate when the card will become affordable.
 
 ## 11. Initial Card Library
 
-The first playable library contains 30 cards.
+The first playable library contains 60 enabled cards. Existing registered cards remain in source but are excluded from normal pools when marked disabled.
 
 | Class | Card count |
 |---|---:|
 | Mage | 10 |
 | Warrior | 10 |
 | Rogue | 10 |
+| Necromancer | 10 |
+| Druid | 10 |
+| Warlock | 10 |
 | Colorless | 0 |
-| Total | 30 |
+| Total | 60 |
 
 Exact damage, duration, and radius values should be tuned after the resource prototype is functional.
 
@@ -628,6 +725,63 @@ Play pattern:
 
 ---
 
+# 14A. Necromancer Card Library
+
+| Card | Rarity | Cost | Type | Effect |
+|---|---|---:|---|---|
+| **Bone Legion** | Common | 2 | Power | For nine seconds, every third Bone Shard calls a second shard from the grave. |
+| **Grave Miasma** | Common | 2 | Power | For eight seconds, Bone Shards apply Poison. |
+| **Raise Dead** | Common | 3 | Signature | Raise a skeletal archer that follows and attacks for twelve seconds. |
+| **Bone Spear** | Common | 2 | Technique | Fire a piercing bone projectile through a line of enemies. |
+| **Grave Grasp** | Common | 2 | Technique | Damage and root enemies in a targeted circle. |
+| **Soul Ward** | Common | 1 | Technique | Gain 14 Armor. |
+| **Wraith Walk** | Uncommon | 1 | Technique | Replace Dash with an untargetable blink for nine seconds. |
+| **Plague Ground** | Common | 3 | Signature | Create a four-second slowing zone that damages and Poisons enemies. |
+| **Bone Storm** | Uncommon | 4 | Signature | Erupt repeated radial volleys of bone for 2.4 seconds. |
+| **Army of the Dead** | Legendary | 5 | Signature | Raise four shades that attack for eighteen seconds. |
+
+Necromancer archetypes are **Bone**, **Plague**, and **Army**. Each creates a visible battlefield result and remains useful when no kill is immediately available.
+
+---
+
+# 14B. Druid Card Library
+
+| Card | Rarity | Cost | Type | Effect |
+|---|---|---:|---|---|
+| **Wolf Aspect** | Common | 2 | Power | For eight seconds, claws attack faster and deal more damage. |
+| **Bear Aspect** | Common | 2 | Power | For eight seconds, claws become wider and heavier. |
+| **Pounce** | Common | 2 | Technique | Leap through enemies, damaging and scattering them. |
+| **Barkskin** | Common | 1 | Technique | Gain 16 Armor. |
+| **Renewal** | Uncommon | 2 | Technique | Restore 22 Health. |
+| **Entangling Roots** | Common | 3 | Signature | Damage and root enemies in a wide targeted circle. |
+| **Hurricane** | Common | 3 | Signature | Become the center of a 2.5-second storm that damages and pushes enemies. |
+| **Moonbeam** | Uncommon | 3 | Signature | Create a four-second damaging moonlit zone. |
+| **Lightning Bloom** | Uncommon | 3 | Signature | Chain lightning through up to six enemies and apply Chill. |
+| **World Tree** | Legendary | 5 | Signature | Heal, gain Armor, and crush and root nearby enemies. |
+
+Druid archetypes are **Feral**, **Guardian**, and **Storm**. Forms alter the basic attack while nature Signatures control space.
+
+---
+
+# 14C. Warlock Card Library
+
+| Card | Rarity | Cost | Type | Effect |
+|---|---|---:|---|---|
+| **Fel Infusion** | Common | 2 | Power | For eight seconds, Eldritch Bolts explode and apply Burn. |
+| **Cursed Bolts** | Common | 2 | Power | For nine seconds, every third Eldritch Bolt splits toward another enemy. |
+| **Shadow Barrage** | Common | 3 | Signature | Fire a stream of shadow bolts for 2.2 seconds. |
+| **Hellfire** | Common | 3 | Signature | Damage and heavily Burn enemies in a targeted circle. |
+| **Demon Skin** | Common | 1 | Technique | Gain 15 Armor. |
+| **Fear** | Common | 2 | Technique | Root and drive back nearby enemies. |
+| **Rain of Fire** | Uncommon | 4 | Signature | Create a five-second burning zone. |
+| **Life Drain** | Uncommon | 3 | Signature | Drain a short chain of enemies for 2.4 seconds and restore 8 Health. |
+| **Infernal Gate** | Rare | 4 | Signature | Summon two lesser demons for fourteen seconds. |
+| **Apocalypse** | Legendary | 5 | Signature | Burn and scatter nearby enemies, leaving a poisonous zone. |
+
+Warlock archetypes are **Fel Fire**, **Shadow**, and **Demonology**. Corruption accelerates access to these effects but does not modify card damage or trigger backlash.
+
+---
+
 ## 15. Initial Fixed Starting Decks
 
 ### 15.1 Mage
@@ -688,6 +842,61 @@ Starting experience:
 - Mobility
 - Target marking
 - Area attack
+
+### 15.4 Necromancer
+
+1. Bone Legion
+2. Bone Legion
+3. Raise Dead
+4. Bone Spear
+5. Grave Grasp
+6. Soul Ward
+7. Plague Ground
+8. Wraith Walk
+
+Starting experience:
+
+- A basic-attack Power
+- One summon
+- Direct and area control
+- Defense and mobility
+- A persistent damage zone
+
+### 15.5 Druid
+
+1. Wolf Aspect
+2. Wolf Aspect
+3. Bear Aspect
+4. Pounce
+5. Barkskin
+6. Renewal
+7. Entangling Roots
+8. Hurricane
+
+Starting experience:
+
+- Two contrasting forms
+- Melee mobility
+- Defense and healing
+- Root and knockback control
+
+### 15.6 Warlock
+
+1. Fel Infusion
+2. Fel Infusion
+3. Cursed Bolts
+4. Shadow Barrage
+5. Hellfire
+6. Demon Skin
+7. Fear
+8. Life Drain
+
+Starting experience:
+
+- Fire and shadow Powers
+- Sustained ranged pressure
+- Area damage and control
+- Defense and recovery
 
 ---
 
@@ -783,7 +992,7 @@ Some removed card-system effects may work better as persistent relics.
 
 ### Astral Battery
 
-- Increase maximum Mana, Rage, or Focus by 2.
+- Increase maximum class resource by 2.
 
 ### Quickcast Sigil
 
@@ -815,19 +1024,19 @@ The rebuilt library should not return immediately to adding 16–17 cards per wo
 
 Recommended expansion:
 
-- 30 core cards
+- 60 core cards
 - 2 new cards per class for each world
-- 6 cards added per world
+- 12 cards added per world
 
 For three additional authored worlds:
 
 | Source | Cards |
 |---|---:|
-| Core library | 30 |
-| World II | 6 |
-| World III | 6 |
-| World IV | 6 |
-| Total | 48 |
+| Core library | 60 |
+| World II | 12 |
+| World III | 12 |
+| World IV | 12 |
+| Total | 96 |
 
 World cards should deepen existing archetypes rather than add new resource systems.
 
@@ -838,18 +1047,27 @@ Examples:
 - Mage: fire burst and Burn
 - Warrior: armor converted into offense
 - Rogue: explosive traps and fire Poison variants
+- Necromancer: burning bones and explosive corpses
+- Druid: wildfire and resilient growth
+- Warlock: infernal summons and spreading flame
 
 ### World III
 
 - Mage: Chill and displacement
 - Warrior: knockback and control
 - Rogue: slowing fields and repositioning
+- Necromancer: drowned dead and persistent zones
+- Druid: tides, moonlight, and displacement
+- Warlock: draining curses and abyssal control
 
 ### World IV
 
 - Mage: lightning and resonance
 - Warrior: counterattacks and shockwaves
 - Rogue: echoes, clones, and repeated precision attacks
+- Necromancer: spectral armies and death echoes
+- Druid: storm chains and ancient guardians
+- Warlock: demonic resonance and shadow bursts
 
 ---
 
@@ -881,6 +1099,9 @@ Examples:
 - Mage: MANA
 - Warrior: RAGE
 - Rogue: FOCUS
+- Necromancer: SOULS
+- Druid: SPIRIT
+- Warlock: CORRUPTION
 
 ### Waiting-card feedback
 
@@ -910,6 +1131,9 @@ These are prototype targets rather than final numbers.
 | Warrior duel while engaged | 20–28 cards per minute |
 | Warrior duel while avoiding combat | 14–20 cards per minute |
 | Rogue duel with average performance | 20–27 cards per minute |
+| Necromancer duel with no adds | 18–26 cards per minute |
+| Druid duel while engaged | 20–28 cards per minute |
+| Warlock duel with average performance | 19–27 cards per minute |
 | Strong resource build | Up to approximately 34 cards per minute |
 
 ### 21.2 Damage distribution
@@ -921,6 +1145,9 @@ Target percentage of total class damage:
 | Mage | 20–35% | 65–80% |
 | Warrior | 50–65% | 35–50% |
 | Rogue | 40–55% | 45–60% |
+| Necromancer | 30–45% | 55–70% |
+| Druid | 45–60% | 40–55% |
+| Warlock | 30–45% | 55–70% |
 
 These values should vary by build but preserve class identity.
 
@@ -944,6 +1171,24 @@ Rogue:
 - 35–50% passive Focus
 - 30–45% precision-based Focus
 - Remaining resource from cards and status interactions
+
+Necromancer:
+
+- 45–60% passive Souls regeneration in single-target combat
+- 20–40% kill-based Souls in group combat
+- Remaining resource from dodges and external rewards
+
+Druid:
+
+- 35–50% passive Spirit regeneration
+- 30–45% claw-based Spirit
+- Remaining resource from perfect dodges and external rewards
+
+Warlock:
+
+- 40–55% passive Corruption regeneration
+- 20–35% bolt-hit Corruption
+- Remaining resource from damage taken, dodges, and external rewards
 
 ### 21.4 Resource waiting
 
@@ -1117,6 +1362,9 @@ The rebuild is successful when all of the following are true.
 - Mage continues casting during a boss fight even when many bolts miss.
 - Warrior cards accelerate noticeably when the Warrior remains engaged.
 - Rogue cards accelerate through critical hits, traps, and perfect dodges.
+- Necromancer cards accelerate through kills without stalling against a lone boss.
+- Druid cards accelerate through landed claws and perfect dodges.
+- Warlock cards accelerate through landed bolts and health damage without a backlash reset.
 - No class experiences ordinary stalls longer than approximately three seconds.
 - Players can explain how their class gains its resource after one run.
 
@@ -1131,7 +1379,10 @@ The rebuild is successful when all of the following are true.
 - Mage damage comes primarily from cards.
 - Warrior damage comes primarily from direct combat.
 - Rogue damage comes from a mixture of attacks, setup, and card bursts.
-- The three classes feel mechanically different without relying only on numerical modifiers.
+- Necromancer damage comes from attacks, persistent control, and summons.
+- Druid damage alternates between empowered melee and nature Signatures.
+- Warlock damage comes primarily from ranged cards, zones, and summoned demons.
+- The six classes feel mechanically different without relying only on numerical modifiers.
 
 ### Library quality
 - Every card supports at least one named archetype.

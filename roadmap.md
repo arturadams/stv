@@ -11,36 +11,37 @@ strategic, not frantic.
 ## The new combat rhythm
 
 ```text
-Move → Basic Attack → Build Flow → Cards Queue → Card Effects Modify Combat
+Move → Basic Attack → Build Class Resource → Cards Queue → Card Effects Modify Combat
      → Big Casts Resolve → Reposition → Repeat
 ```
 
-## Card behaviors (the new standard)
+## Player-facing card types (Card System v2)
 
-| Type            | Timing                          | Example |
-|-----------------|---------------------------------|---------|
-| Power           | short channel → **4–10s active**, modifies basic attack / stats | Flame Attunement |
-| Skill           | 0.5–0.7s channel, fast tactical action | Trap, Shield Wall, Mana Burst |
-| Mobility        | not cast at all — **overwrites your Dash (Space) for ~8s** | Teleport, Shadowstep, Charge |
-| Sustained Spell | ~1s channel → **2–3s continuous casting** | Arc Lightning, Whirlwind, Fan of Knives |
-| AoE Spell       | **1.5–2.5s channel** with rune-circle preview → one big impact | Meteor, Earthquake |
-| Trigger         | reacts to events for ~25–30s | Riposte, Toxic Reaction |
-| Engine          | manipulates queue / Flow / durations | Extend, Grand Channel |
+| Type | Timing | Example |
+|---|---|---|
+| Power | short channel → **4–10s active**, modifies the character | Arcane Mirror, Wolf Aspect |
+| Technique | fast defensive, mobility, setup, or targeted action | Teleport, Iron Skin, Bone Spear |
+| Signature | major attack, summon, or control event | Meteor, Whirlwind, Apocalypse |
 
-Readability rules: active card slot, queue highlight, duration bars, card
-name display, enlarged card pop on cast, power badges + aura on the player,
-and a short gap between resolves so the queue visibly accumulates.
-No card resolves in under 0.3s unless it is a modifier/engine.
+Readability rules: active card slot, only the next two cards, duration bars,
+card name display, enlarged card pop on cast, power badges + aura on the
+player, and a short gap between resolves. Internal effect kinds remain
+data-driven, but queue manipulation is excluded from normal card pools.
 
 ## Classes
 
-- **Mage** — auto arcane bolt. Attunement Powers transform the bolt (fire /
-  frost / storm), sustained channels, big ritual AoEs, Elemental Cycle engine.
-- **Warrior** — auto melee arc. **Rage** builds from hitting, taking damage and
-  close kills; Rage speeds Warrior card channeling and empowers swings.
-- **Rogue** — auto knives. Poison/bleed Powers, ground traps, mobility.
-  **Opportunity** (kills, poison kills, perfect dodges, trap triggers) quickens
-  Rogue cards and feeds crits.
+- **Mage** — auto arcane bolt. **Mana** regenerates reliably; every fourth
+  landed bolt and perfect dodges accelerate ritual casting.
+- **Warrior** — auto melee arc. **Rage** regenerates in combat and accelerates
+  through landed swings, Armor blocks, wounds, and perfect dodges.
+- **Rogue** — auto knives. **Focus** regenerates in combat and accelerates
+  through crits, traps, poisoned kills, and perfect dodges.
+- **Necromancer** — auto bone shards. **Souls** regenerate in combat and gain
+  an additional point on every kill, fueling grave control and summons.
+- **Druid** — auto claw arcs. **Spirit** regenerates in combat and accelerates
+  every third landed claw and on perfect dodges.
+- **Warlock** — auto eldritch bolts. **Corruption** regenerates in combat and
+  accelerates every fourth landed bolt and when health damage is taken.
 
 ## World
 
@@ -71,16 +72,14 @@ time/kills carry over, so the difficulty curve never resets.
 
 ## Run setup & meta progression
 
-Starting a run rolls a **randomized hand: 9 Commons + 1 Uncommon**,
-class-focused and guaranteed playable (two Powers, a Spell, a Skill; max 2
-copies of a card). Before entering, a setup screen shows the rolled cards
-(rerollable) and offers **world selection** — any of the five worlds can be
-played directly, no climbing required (for now).
+Starting a run uses a **fixed eight-card deck** for the chosen class. Before
+entering, the setup screen shows that deck and offers **world selection**.
+Decks may grow to 12 cards, with at most two copies and a six-card floor.
 
 **Meta progression** persists across runs (localStorage): reaching a world
 once unlocks its card set forever — its cards then have a reduced *chance*
-(×0.3) to appear in earlier worlds' drafts, shops, and even rolled starting
-hands. Every school now spans Common → Legendary (new: Arcane Singularity,
+(×0.3) to appear in earlier worlds' drafts and shops. Every school spans
+Common → Legendary (including Arcane Singularity,
 Thousand Cuts, Blade Flurry, Worldfire).
 
 ## Encounters (simulated multiplayer)
@@ -120,7 +119,7 @@ pause while you rest. Stepping onto the hearth opens the sanctuary:
 1. ✅ Basic attack layer (class bolt / slash / knife — not cards)
 2. ✅ Slower card types (Power / Skill / Sustained / AoE / Trigger / Engine)
 3. ✅ Active card visibility (active slot, pop, badges, duration bars)
-4. ✅ Class mechanics (Attunements, Rage, Opportunity)
+4. ✅ Class mechanics (Mana, Rage, Focus, Souls, Spirit, Corruption)
 5. ✅ Infinite procedural map (chunks, biomes, camps, shrines, boss gates)
 6. ✅ Matchmaking encounter (rival souls, featured cards, Fight / Party Up)
 7. ✅ Matchmaking fallback boss (guardian awakens on timeout)

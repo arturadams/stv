@@ -34,6 +34,9 @@ describe('headless class smoke', () => {
     ['mage', 101],
     ['warrior', 202],
     ['rogue', 303],
+    ['necromancer', 404],
+    ['druid', 505],
+    ['warlock', 606],
   ] as const)('simulates a 180-second %s run', (classId, seed) => {
     const game = makeHeadlessGame(seed, classId);
     let cardsResolved = 0;
