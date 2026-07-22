@@ -6,6 +6,7 @@ import { makeUidCounter } from '../core/ids.js';
 import { makeRng } from '../core/rng.js';
 import { sfx } from '../audio.js';
 import { computePreview, resolveCard } from './effects/index.js';
+import { MAX_DAMAGE_REDUCTION } from './combat.js';
 import { runEnchantAction } from './effects/enchantActions.js';
 import type { EnchantPayload, EnchantRef } from './effects/enchantActions.js';
 import { damageEnemy, enemiesIn } from './combat.js';
@@ -43,7 +44,9 @@ export function createGame(opts: { seed?: number } = {}): GameState {
     enemies: [], projectiles: [], enemyProjectiles: [], zones: [], hazards: [], telegraphs: [],
     summons: [], pickups: [], particles: [], floaters: [], fx: [],
     sustains: [], traps: [],
-    relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false,
+    relics: [], relicRadiusMult: 1, hasDuelist: false, hasCrossClass: false, relicState: {},
+    goldMult: 1, sellPriceMult: 1, buyPriceMult: 1, declinedRelics: [],
+    damageReductionCap: MAX_DAMAGE_REDUCTION,
     camera: { x: 0, y: 0, shake: 0, impulseX: 0, impulseY: 0 },
     chunks: new Map(),
     portal: null,

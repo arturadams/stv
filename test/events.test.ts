@@ -33,13 +33,16 @@ describe('typed EventBus', () => {
 
   it('exposes constants for every current event', () => {
     expect(Object.values(EVT).sort()).toEqual([
+      'bossHealthThreshold',
       'cardDrawn',
       'cardQueued',
       'cardResolved',
       'channelStart',
       'comboChanged',
+      'criticalHit',
       'dash',
       'deckShuffled',
+      'enemyHit',
       'enemyKilled',
       'flowGained',
       'perfectDodge',
@@ -48,6 +51,10 @@ describe('typed EventBus', () => {
       'powerGained',
       'queueEmpty',
       'statusApplied',
+      'statusExpired',
+      'summonCreated',
+      'summonExpired',
+      'summonSacrificed',
       'trapTriggered',
     ]);
   });

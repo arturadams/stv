@@ -3,6 +3,7 @@ import type { CardDef, ClassId, School } from '../../data/types.js';
 import { makeRng } from '../../core/rng.js';
 import type { Rng } from '../../core/rng.js';
 import { sfx } from '../../audio.js';
+import { MAX_DAMAGE_REDUCTION } from '../combat.js';
 import { CHUNK, worldDef } from '../map/chunks.js';
 import type { DeckEntry, GameState } from '../types.js';
 import { recordWorldReached } from './meta.js';
@@ -108,6 +109,12 @@ export function startRun(game: GameState, classId: ClassId = 'mage', opts: Start
   game.relicRadiusMult = 1;
   game.hasDuelist = false;
   game.hasCrossClass = false;
+  game.goldMult = 1;
+  game.sellPriceMult = 1;
+  game.buyPriceMult = 1;
+  game.declinedRelics = [];
+  game.relicState = {};
+  game.damageReductionCap = MAX_DAMAGE_REDUCTION;
   game.state = 'combat';
   game.kills = 0;
   game.runTime = 0;
@@ -205,6 +212,7 @@ export function advanceWorld(game: GameState, opts: AdvanceWorldOpts = {}): void
   game.summons = [];
   game.engine.sustainedActive = false;
   game.zoneRegion = null;
+  delete game.relicState.undyingEmberUsed; // The Undying Ember re-arms each world
   game.activeBoss = null;
   game.mm = { state: 'idle', nextT: game.rng.range(50, 80), searchT: 0, timeout: 9 };
   game.rival = null;

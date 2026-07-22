@@ -462,7 +462,14 @@ function rebuildRelics(game) {
       el.className = 'relic';
       el.style.setProperty('--c', r.color);
       el.textContent = r.glyph;
-      el.title = `${r.name} — ${r.text}`;
+      // relic enchant + counter share the relic's name (see applyRelic) —
+      // match back to the live enchant record to show a visible counter.
+      // Bespoke relics (no live enchant) keep their counter directly under
+      // game.relicState[relic.id].counter instead — check both.
+      const ench = game.engine.enchants.find((e) => e.name === r.name);
+      const counter = (ench && ench.counter) || (game.relicState[r.id] && game.relicState[r.id].counter);
+      const counterText = counter ? `\n${counter.label} ${counter.value}/${counter.max}` : '';
+      el.title = `${r.name} — ${r.text}${counterText}`;
     } else {
       el.className = 'relic empty';
     }
@@ -513,7 +520,7 @@ function syncSanctuary(game) {
     row.className = 'shop-row';
     const el = buildCardEl(def, 'mini');
     attachTooltip(el, def);
-    const price = CARD_PRICES[def.rarity];
+    const price = Math.round(CARD_PRICES[def.rarity] * game.buyPriceMult);
     const btn = document.createElement('button');
     btn.className = 'sanct-btn';
     const acquirable = canAcquireCard(game.deckIds, def.id);
@@ -557,7 +564,7 @@ function syncSanctuary(game) {
     }
     const sb = document.createElement('button');
     sb.className = 'sanct-btn';
-    sb.textContent = `SELL ◈${sellPrice({ id, lvl })}`;
+    sb.textContent = `SELL ◈${Math.round(sellPrice({ id, lvl }) * game.sellPriceMult)}`;
     if (game.deckIds.length <= 6) sb.disabled = true;
     sb.addEventListener('click', () => { sellCard(game, id, lvl); });
     row.appendChild(sb);

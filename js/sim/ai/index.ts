@@ -1,5 +1,6 @@
 import { STATUS_DEFS, damageEnemy, damagePlayer } from '../combat.js';
 import { chunksNear, clampToRegion } from '../map/chunks.js';
+import { EVT } from '../../core/events.js';
 import type { EnemyState, EnemyStatusState, StatusName } from '../../data/types.js';
 import type { GameState } from '../types.js';
 import { updateEnemyBehavior } from './registry.js';
@@ -83,7 +84,10 @@ export function updateEnemy(game: GameState, e: EnemyState, dt: number): void {
       }
     }
     if (name === 'chill') slowFactor *= 0.5;
-    if (st.t <= 0) delete e.statuses[name];
+    if (st.t <= 0) {
+      delete e.statuses[name];
+      game.bus.emit(EVT.statusExpired, { enemy: e, status: name });
+    }
   }
   if (e.freeze > 0) {
     e.freeze -= dt;
@@ -108,6 +112,7 @@ export function updateEnemy(game: GameState, e: EnemyState, dt: number): void {
   for (const z of game.zones) {
     if (z.slow && Math.hypot(e.x - z.x, e.y - z.y) < z.r) slowFactor *= z.slow;
   }
+  if (e.relicSlowMult) slowFactor *= e.relicSlowMult;
 
   const spd = e.def.speed * slowFactor;
   const dx = p.x - e.x;

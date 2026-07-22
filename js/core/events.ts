@@ -5,6 +5,7 @@ import type {
   School,
   StatusName,
 } from '../data/types.js';
+import type { Summon } from '../sim/types.js';
 
 export type { EnemyState, School, StatusName } from '../data/types.js';
 
@@ -20,11 +21,23 @@ export interface EventMap {
   powerGained: { id: string; school: School };
   powerExpired: { id: string; school: School };
   statusApplied: { enemy: EnemyState; status: StatusName; x: number; y: number };
+  statusExpired: { enemy: EnemyState; status: StatusName };
   enemyKilled: { enemy: EnemyState; x: number; y: number };
   playerHit: { amount: number };
-  perfectDodge: Record<string, never>;
+  perfectDodge: { x: number; y: number };
   trapTriggered: { x: number; y: number };
   dash: Record<string, never>;
+  criticalHit: { enemy: EnemyState; dmg: number };
+  enemyHit: { enemy: EnemyState; dmg: number; basic: boolean };
+  bossHealthThreshold: { enemy: EnemyState; pct: number };
+  summonCreated: { summon: Summon };
+  // `forced` distinguishes a summon evicted early to make room for a new one
+  // (js/sim/effects/coreSummon.ts's per-id/global cap eviction) from one that
+  // simply ran out its own timer (js/sim/entities/summons.ts) — relics that
+  // promise a reward for natural expiry specifically (e.g. Last Procession)
+  // need to tell the two apart
+  summonExpired: { summon: Summon; forced?: boolean };
+  summonSacrificed: { summon: Summon };
 }
 
 export const EVT = {
@@ -39,11 +52,18 @@ export const EVT = {
   powerGained: 'powerGained',
   powerExpired: 'powerExpired',
   statusApplied: 'statusApplied',
+  statusExpired: 'statusExpired',
   enemyKilled: 'enemyKilled',
   playerHit: 'playerHit',
   perfectDodge: 'perfectDodge',
   trapTriggered: 'trapTriggered',
   dash: 'dash',
+  criticalHit: 'criticalHit',
+  enemyHit: 'enemyHit',
+  bossHealthThreshold: 'bossHealthThreshold',
+  summonCreated: 'summonCreated',
+  summonExpired: 'summonExpired',
+  summonSacrificed: 'summonSacrificed',
 } as const satisfies { [K in keyof EventMap]: K };
 
 export class EventBus {

@@ -1,6 +1,7 @@
 import type { EventBus } from '../core/events.js';
 import type { UidCounter } from '../core/ids.js';
 import type { Rng } from '../core/rng.js';
+import type { SummonFamily } from '../data/summonFamilies.js';
 import type {
   Buffs,
   CardDef,
@@ -100,6 +101,7 @@ export interface BasicCombatCtx {
   buffs: Partial<Buffs>;
   dmgMult: number;
   basic?: boolean;
+  relicId?: string;
 }
 
 export type CombatCtx = EffectCtx | BasicCombatCtx;
@@ -204,6 +206,8 @@ export interface Summon extends Vec2 {
   fireRate: number;
   dmg: number;
   ctx: EffectCtx;
+  summonFamily: SummonFamily;
+  isRelicSummon: boolean;
 }
 
 export interface Pickup extends Vec2 {
@@ -348,6 +352,15 @@ export interface GameState {
   relicRadiusMult: number;
   hasDuelist: boolean;
   hasCrossClass: boolean;
+  goldMult: number;
+  sellPriceMult: number;
+  buyPriceMult: number;
+  declinedRelics: Array<{ id: string; expiresAtBoss: number }>;
+  damageReductionCap: number;
+  // per-relic scratch state (cooldown timers, rolling windows, hysteresis
+  // flags) for the small set of relics that need more than a declarative
+  // enchant — see js/sim/effects/relicMechanics.ts
+  relicState: Record<string, unknown>;
   camera: Camera;
   chunks: Map<string, Chunk>;
   portal: PortalState | null;

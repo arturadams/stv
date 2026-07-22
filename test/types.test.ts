@@ -65,6 +65,7 @@ const relic = {
   name: 'Typed Relic',
   glyph: '+',
   color: '#fff',
+  category: 'engine',
   text: 'Type fixture',
   enchant: {
     on: ['statusApplied'],

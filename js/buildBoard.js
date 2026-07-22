@@ -1,4 +1,4 @@
-import { CARDS, CLASS_BRANCHES, CLASSES, TALENTS, TALENT_LIST } from './data.js';
+import { CARDS, CLASS_BRANCHES, CLASSES, RELIC_REQUIREMENTS, TALENTS, TALENT_LIST } from './data.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -143,6 +143,58 @@ function renderSynergies(game) {
   }
 }
 
+const RELIC_CATEGORY_LABELS = {
+  combat: 'COMBAT', economy: 'ECONOMY', engine: 'ENGINE', legendary: 'LEGENDARY', class: 'CLASS',
+};
+
+function relicRelatedCards(game, relic) {
+  const req = RELIC_REQUIREMENTS[relic.id];
+  const ids = new Set(req?.anyCards || []);
+  if (relic.branch) {
+    for (const entry of game.deckIds) {
+      const card = CARDS[entry.id];
+      if (card && (card.branch === relic.branch || card.secondaryBranch === relic.branch)) ids.add(card.id);
+    }
+  }
+  return [...ids].map((id) => CARDS[id]).filter(Boolean);
+}
+
+function renderRelics(game) {
+  const root = $('build-relics');
+  root.innerHTML = `<div class="build-summary">
+    <b>RELICS — ${game.relics.length}</b>
+    <span>Class relics ${game.relics.filter((r) => r.category === 'class').length} / 4 · Neutral Legendary ${game.relics.some((r) => r.category === 'legendary') ? '1' : '0'} / 1</span>
+  </div>`;
+  const categories = ['combat', 'economy', 'engine', 'legendary', 'class'];
+  for (const category of categories) {
+    const relics = game.relics.filter((r) => r.category === category);
+    if (!relics.length) continue;
+    const section = document.createElement('section');
+    section.className = 'build-branch';
+    section.innerHTML = `<h3><span>${RELIC_CATEGORY_LABELS[category]}</span><span>${relics.length}</span></h3>`;
+    const grid = document.createElement('div');
+    grid.className = 'build-card-grid';
+    for (const relic of relics) {
+      const ench = game.engine.enchants.find((e) => e.name === relic.name);
+      const counter = (ench && ench.counter) || (game.relicState[relic.id] && game.relicState[relic.id].counter);
+      const related = relicRelatedCards(game, relic);
+      const row = document.createElement('div');
+      row.className = 'build-card-row';
+      row.innerHTML = `
+        <b style="color:${relic.color}">${relic.glyph} ${relic.name}</b>
+        <span class="meta">${relic.text}</span>
+        ${counter ? `<span class="status">${counter.label} ${counter.value} / ${counter.max}</span>` : ''}
+        <span class="meta">Related cards: ${related.length ? related.map((card) => card.name).join(', ') : 'none in deck'}</span>`;
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    root.appendChild(section);
+  }
+  if (!game.relics.length) {
+    root.insertAdjacentHTML('beforeend', '<div class="build-card-row meta">No relics acquired yet — boss gates offer a Golden Chest of three.</div>');
+  }
+}
+
 function renderHistory(game) {
   const root = $('build-history');
   root.innerHTML = '<div class="build-summary"><b>CHOICE HISTORY</b><span>Important run decisions in chronological order.</span></div>';
@@ -162,6 +214,7 @@ export function renderBuildBoard(game) {
   $('build-title').textContent = cls.name.toUpperCase() + ' RUN BUILD';
   renderDeck(game);
   renderTalents(game);
+  renderRelics(game);
   renderSynergies(game);
   renderHistory(game);
 }
@@ -170,7 +223,7 @@ export function selectBuildTab(tab) {
   for (const button of document.querySelectorAll('[data-build-tab]')) {
     button.classList.toggle('selected', button.dataset.buildTab === tab);
   }
-  for (const name of ['deck', 'talents', 'synergies', 'history']) {
+  for (const name of ['deck', 'talents', 'relics', 'synergies', 'history']) {
     $('build-' + name).classList.toggle('hidden', name !== tab);
   }
 }

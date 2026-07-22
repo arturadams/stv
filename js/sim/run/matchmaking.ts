@@ -148,7 +148,7 @@ export function duelVictory(game: GameState, e: EnemyState): void {
   game.spawnT = Math.max(game.spawnT, 8); // a breath before the world returns
   game.mm = { state: 'idle', nextT: game.rng.range(75, 120), searchT: 0, timeout: 9 };
   game.player.hp = Math.min(game.player.maxHp, game.player.hp + 25);
-  game.gold += 30;
+  game.gold += Math.round(30 * game.goldMult);
   game.engine.gainFlow(5, 'duel');
   game.banner = { title: 'THE RIVAL SOUL YIELDS', sub: 'Its cards scatter — take any', t: 2.6 };
   // the spoils of a duel: any of the LOSER's cards, even off-class

@@ -45,7 +45,9 @@ export function updateProjectiles(game: GameState, dt: number): void {
         if (pr.hit.has(e.uid)) continue;
         pr.hit.add(e.uid);
       }
-      hitEnemy(game, e, pr.dmg, pr.ctx, pr.eff);
+      const bonus = pr.eff.bonusVsStatus;
+      const dmg = bonus && e.statuses[bonus.status] ? bonus.dmg : pr.dmg;
+      hitEnemy(game, e, dmg, pr.ctx, pr.eff);
       spark(game, pr.x, pr.y, pr.color, 5, 120, 0.35);
       // §7.2: every 4th landed Arcane Bolt grants +1 Mana — the fix for the
       // Mage never gaining anything from a missed/hit basic attack.
@@ -99,7 +101,7 @@ export function updateProjectiles(game: GameState, dt: number): void {
     if (d < pr.r + p.r + 4) {
       if (p.iframes > 0 && p.dashT > 0 && !p.dodgeCredited) {
         p.dodgeCredited = true;
-        game.bus.emit(EVT.perfectDodge, {});
+        game.bus.emit(EVT.perfectDodge, { x: p.x, y: p.y });
       } else if (p.iframes <= 0 && p.untargetable <= 0) {
         damagePlayer(game, pr.dmg, pr.x, pr.y);
         pr.dead = true;

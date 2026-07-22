@@ -49,6 +49,8 @@ export interface ChainSpec {
   range: number;
   critChance?: number;
   status?: StatusApp;
+  // heals the player for this fraction of damage dealt on each connected jump
+  lifesteal?: number;
 }
 
 export interface ProjectileSpec {
@@ -67,6 +69,9 @@ export interface ProjectileSpec {
   element?: ElementId;
   explode?: ExplosionSpec;
   chainOnHit?: ChainSpec;
+  // deals `dmg` instead of the base amount against a target already
+  // carrying `status` (e.g. Ice Lance vs Chilled enemies)
+  bonusVsStatus?: { status: StatusName; dmg: number };
 }
 
 export interface PowerSpec {
@@ -137,6 +142,15 @@ export interface SpreadStatus {
   r: number;
 }
 
+export interface EnchantCounterSpec {
+  label: string;
+  max: number;
+}
+
+export interface EnchantEchoSpec {
+  powerMult: number;
+}
+
 export interface EnchantDo {
   flow?: number;
   flowIfNear?: number;
@@ -147,12 +161,73 @@ export interface EnchantDo {
   burst?: EnchantBurst;
   counterArc?: CounterArc;
   spreadStatus?: SpreadStatus;
+  // relic primitives (design doc §3.4/§13) — see js/sim/effects/enchantActions.ts
+  incrementCounter?: EnchantCounterSpec;
+  resetCounter?: boolean;
+  echo?: EnchantEchoSpec;
+  healPercentOfDamage?: number;
+  healFlat?: number;
+  armorFlat?: number;
+  // the common "count N qualifying events, then fire once and reset" shape
+  // (design doc §3.4's visible counters) in one action instead of two
+  // separately-timed enchants
+  stackAndTrigger?: {
+    max: number;
+    label: string;
+    onFull: { burst?: EnchantBurst; flow?: number; armor?: number };
+  };
+  // amplify damage a target takes for the status's own duration — reuses
+  // the existing per-enemy `mark` amplifier (design doc's "Lasting Scar"-
+  // style relics)
+  ampOnStatus?: { amp: number };
+  // Echo Stone's "every Nth Signature repeats at reduced power" shape —
+  // registered in js/sim/effects/index.ts (not enchantActions.ts) since it
+  // needs performEcho, which would otherwise be a circular import
+  stackAndEcho?: {
+    max: number;
+    label: string;
+    powerMult: number;
+  };
+  // Phoenix Ember-style "at N status stacks, detonate and roll the count
+  // back" — the status itself (e.g. Burn) already tracks its own count on
+  // the enemy, so this just watches it rather than keeping separate state
+  explodeAtStacks?: {
+    status: StatusName;
+    threshold: number;
+    dmg: number;
+    r: number;
+    element: ElementId;
+  };
+  // Toxic Overflow-style "chance to pile on more of the status you just
+  // applied, to the same target"
+  addStackToSelf?: { status: StatusName; stacks: number };
 }
 
 export interface EnchantFilter {
   status?: StatusName;
   hasStatus?: StatusName;
   school?: School;
+  cardId?: string;
+  keyword?: string;
+  boss?: boolean;
+  elite?: boolean;
+  // for events carrying a `pct` (e.g. bossHealthThreshold): only match at or
+  // below this fraction of max HP
+  maxPct?: number;
+  // for events carrying an `inst` (e.g. cardResolved): only match this card
+  // category/rarity — cat/notRarity are separate fields rather than one
+  // richer matcher because relics only ever need one at a time so far
+  cat?: Cat;
+  notRarity?: Rarity;
+  // for events carrying an `amount` (e.g. playerHit): only match at or above
+  // this — the design doc's "Heavy hit" threshold
+  minAmount?: number;
+  // for events carrying a `summon` (summonCreated/summonExpired/summonSacrificed)
+  summonFamily?: import('./summonFamilies.js').SummonFamily;
+  excludeRelicSummon?: boolean;
+  // for summonExpired: only match natural timer expiry, not an early cap
+  // eviction (see EventMap.summonExpired's `forced` field)
+  excludeForced?: boolean;
 }
 
 export interface EnchantSpec {
@@ -160,6 +235,11 @@ export interface EnchantSpec {
   filter?: EnchantFilter;
   chance?: number;
   do: EnchantDo;
+  // design doc §15: relic resource gains are capped by default — this is the
+  // explicit, named exception for rare jackpot-style Legendaries (e.g. The
+  // Thousandth Soul's 5%-chance full Flow refill) where the cap would defeat
+  // the relic's entire point
+  uncapped?: boolean;
 }
 
 export interface ModMatch {
@@ -425,7 +505,22 @@ export interface RelicStats {
   duelist?: boolean;
   powerDurMult?: number;
   crossClass?: boolean;
+  goldMult?: number;
+  sellPriceMult?: number;
+  buyPriceMult?: number;
+  summonCapBonus?: number;
+  maxHealth?: number;
+  damageReductionMax?: number;
+  sanctuaryGold?: number;
+  extraStock?: boolean;
+  queueCapBonus?: number;
+  // a flat damage-reduction source (like a Power's damageReduction, but from
+  // an always-owned relic) — still subject to game.damageReductionCap
+  damageReductionFlat?: number;
+  sanctuaryArmor?: number;
 }
+
+export type RelicCategory = 'combat' | 'economy' | 'engine' | 'legendary' | 'class';
 
 export interface RelicDef {
   id: string;
@@ -433,8 +528,22 @@ export interface RelicDef {
   glyph: string;
   color: string;
   text: string;
-  enchant?: EnchantSpec;
+  category: RelicCategory;
+  // undefined for Neutral relics; set for the 12-per-class Golden Chest pool
+  classId?: ClassId;
+  branch?: string;
+  // an array for relics that need more than one independent trigger (e.g.
+  // Ashen Recursion firing on both enemyKilled and bossHealthThreshold) —
+  // applyRelic registers each one as its own enchant
+  enchant?: EnchantSpec | EnchantSpec[];
   stats?: RelicStats;
+  // true for the handful of relics whose behavior needs a standing bus
+  // listener or seeded relicState rather than declarative enchant/stats
+  // hooks (design doc §3.3's "bespoke" shape) — the actual handler is
+  // registered by id in js/sim/effects/relicMechanics.ts's RELIC_ON_ACQUIRE,
+  // the same split cards use between data (EffectSpec) and behavior
+  // (registerEffect)
+  bespoke?: boolean;
 }
 
 export interface Buffs {
@@ -466,6 +575,10 @@ export interface EffectCtx {
   lvl: number;
   upgradeRank?: number;
   basic?: boolean;
+  // set when this hit was generated by a relic (not a card) — hitEnemy uses
+  // this to skip resource-on-hit gains and crit-chain tracking so relic
+  // damage can't recursively trigger other on-hit relics (design doc §3.5/§14)
+  relicId?: string;
 }
 
 export type BehaviorId =
@@ -687,6 +800,13 @@ export interface EnemyState {
   campRef?: Camp | null;
   featured?: CardDef[] | null;
   cls?: ClassId | null;
+  // last 15%-of-maxHp band this boss crossed into, for EVT.bossHealthThreshold
+  // (undefined until the first hit — see sim/combat.ts's damageEnemy)
+  lastThresholdBand?: number;
+  // an additional per-enemy movement-speed multiplier relics can set (e.g.
+  // Endless Winter's boss slow) without touching every enemy AI file's own
+  // movement math — read alongside chill's existing slowFactor
+  relicSlowMult?: number;
   // Per-behavior scratch state, populated by that behavior's `init` when the
   // enemy spawns (see sim/ai/registry.ts) and narrowed to the right shape by
   // each behavior module — e.g. LungeState, BossState, RivalState. Nothing
@@ -901,6 +1021,10 @@ export interface CoreMechanicEffect {
     | 'bloodPact'
     | 'doom'
     | 'hexOfFrailty'
-    | 'apocalypse';
+    | 'apocalypse'
+    | 'guardianRoar'
+    | 'livingBark'
+    | 'moonlitGrove'
+    | 'worldTree';
   dur?: number;
 }

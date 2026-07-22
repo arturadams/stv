@@ -22,7 +22,9 @@ export function makeCard(id, lvl = 1, uid = 0) {
 }
 
 const ENCHANT_EVENTS = [EVT.statusApplied, EVT.enemyKilled, EVT.perfectDodge, EVT.queueEmpty,
-  EVT.playerHit, EVT.cardResolved, EVT.powerExpired, EVT.trapTriggered];
+  EVT.playerHit, EVT.cardResolved, EVT.powerExpired, EVT.trapTriggered,
+  EVT.statusExpired, EVT.criticalHit, EVT.enemyHit, EVT.bossHealthThreshold,
+  EVT.summonCreated, EVT.summonExpired, EVT.summonSacrificed, EVT.comboChanged];
 
 export class CardEngine {
   constructor(bus, rng = makeRng(Date.now())) {
@@ -208,6 +210,17 @@ export class CardEngine {
     this.uiDirty = true;
   }
 
+  // extends only the one Power matching id — used by relics (e.g. Endless
+  // Fury) that should extend the specific Power that's expiring, not every
+  // other unrelated Power that happens to be active at the same time
+  extendPower(id, sec) {
+    const pw = this.powers.find((p) => p.id === id);
+    if (!pw) return;
+    pw.timeLeft += sec;
+    pw.dur += sec;
+    this.uiDirty = true;
+  }
+
   // Merge every active power's basic-attack modifications.
   basicMods() {
     const m = { override: null, addStatus: [], arcMult: 1, dmgMult: 1, rateMult: 1, extraEvery: 0 };
@@ -250,6 +263,8 @@ export class CardEngine {
       name: label.name, glyph: label.glyph, color: label.color,
       timeLeft: spec.dur ?? Infinity, on: spec.on, filter: spec.filter || null,
       chance: spec.chance ?? 1, do: spec.do, relic: !spec.dur,
+      uncapped: !!spec.uncapped,
+      counter: null, // lazily created by the 'incrementCounter' enchant action
     });
     this.uiDirty = true;
   }
@@ -261,6 +276,17 @@ export class CardEngine {
         if (e.filter.status && payload.status !== e.filter.status) continue;
         if (e.filter.hasStatus && !(payload.enemy && payload.enemy.statuses[e.filter.hasStatus])) continue;
         if (e.filter.school && payload.school !== e.filter.school) continue;
+        if (e.filter.cardId && payload.inst?.def?.id !== e.filter.cardId) continue;
+        if (e.filter.keyword && !(payload.inst?.def?.keywords || []).includes(e.filter.keyword)) continue;
+        if (e.filter.boss && !payload.enemy?.def?.boss) continue;
+        if (e.filter.elite && !payload.enemy?.def?.elite) continue;
+        if (e.filter.maxPct != null && !(payload.pct != null && payload.pct <= e.filter.maxPct)) continue;
+        if (e.filter.cat && payload.inst?.def?.cat !== e.filter.cat) continue;
+        if (e.filter.notRarity && payload.inst?.def?.rarity === e.filter.notRarity) continue;
+        if (e.filter.minAmount != null && !(payload.amount != null && payload.amount >= e.filter.minAmount)) continue;
+        if (e.filter.summonFamily && payload.summon?.summonFamily !== e.filter.summonFamily) continue;
+        if (e.filter.excludeRelicSummon && payload.summon?.isRelicSummon) continue;
+        if (e.filter.excludeForced && payload.forced) continue;
       }
       if (e.chance < 1 && !this.rng.chance(e.chance)) continue;
       if (this.runEnchantAction) this.runEnchantAction(e.do, payload, e);

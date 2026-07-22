@@ -13,8 +13,18 @@ import { campCleared } from './map/features.js';
 import { worldDef } from './map/chunks.js';
 import { spawnEnemy } from './entities/spawn.js';
 import { gainRunXp } from './run/talents.js';
-import type { CombatCtx, GameState } from './types.js';
+import type { CombatCtx, GameState, Summon } from './types.js';
 import type { FeatureState } from './map/features.js';
+
+// shared "oldest summon" tie-break used by every summon-eviction path
+// (cap eviction, Dark Sacrifice, Deathly Pact) so they can't drift apart
+export function oldestSummonIndex(summons: readonly Summon[]): number {
+  let oldest = 0;
+  for (let i = 1; i < summons.length; i++) {
+    if (summons[i].t > summons[oldest].t) oldest = i;
+  }
+  return oldest;
+}
 
 export interface StatusDef {
   dps: number;
@@ -28,6 +38,9 @@ export const STATUS_DEFS: Record<StatusName, StatusDef> = {
   bleed: { dps: 2.2, dur: 4, color: '#ff5d6a' },
   chill: { dps: 0, dur: 2.2, color: ELEMENT_COLORS.frost },
 };
+
+// design doc §15 — reused by relic damage-reduction stat-hooks in later phases
+export const MAX_DAMAGE_REDUCTION = 0.6;
 
 export type CombatState = FeatureState & Pick<
   GameState,
@@ -149,13 +162,15 @@ export function applyStatus(
   });
 }
 
+// returns the actual damage applied (post-mark, post-crit, rounded) so
+// callers that report it (e.g. EVT.criticalHit) match what really landed
 export function damageEnemy(
   game: CombatState,
   enemy: EnemyState,
   amount: number,
   opts: DamageOpts = {},
-): void {
-  if (!targetable(enemy)) return;
+): number {
+  if (!targetable(enemy)) return 0;
   game.lastCombatT = game.runTime;
   let damage = amount;
   if (enemy.mark && enemy.mark.t > 0) damage *= enemy.mark.amp;
@@ -174,7 +189,28 @@ export function damageEnemy(
   );
   if (opts.crit) sfx('crit');
   else if (!opts.quiet) sfx('hit');
+  if (enemy.def.boss) checkBossHealthThreshold(game, enemy);
   if (enemy.hp <= 0) killEnemy(game, enemy, opts);
+  return damage;
+}
+
+// generic, additive 15%-of-maxHp threshold ping for relics — independent of
+// each boss's own hardcoded 50% phase-swap check in js/sim/ai/*.ts, which
+// this does not replace or interact with
+function checkBossHealthThreshold(game: CombatState, enemy: EnemyState): void {
+  const pct = Math.max(0, enemy.hp) / enemy.maxHp;
+  const band = Math.floor(pct / 0.15);
+  if (enemy.lastThresholdBand === undefined) {
+    enemy.lastThresholdBand = band;
+    return;
+  }
+  // fire once per band actually crossed (a single burst that drops several
+  // bands at once still pings each one), and re-arm bands the boss heals
+  // back through so a later drop can fire them again
+  for (let b = enemy.lastThresholdBand - 1; b >= band; b--) {
+    game.bus.emit(EVT.bossHealthThreshold, { enemy, pct });
+  }
+  enemy.lastThresholdBand = band;
 }
 
 export function killEnemy(
@@ -296,8 +332,8 @@ export function killEnemy(
 export function damagePlayer(
   game: CombatState,
   amount: number,
-  _sourceX?: number,
-  _sourceY?: number,
+  sourceX?: number,
+  sourceY?: number,
 ): void {
   const player = game.player;
   if (game.state !== 'combat' || game.encounterPause) return;
@@ -305,23 +341,42 @@ export function damagePlayer(
   if (player.iframes > 0) {
     if (!player.dodgeCredited && player.dashT > 0) {
       player.dodgeCredited = true;
-      game.bus.emit(EVT.perfectDodge, {});
+      game.bus.emit(EVT.perfectDodge, { x: player.x, y: player.y });
     }
     return;
   }
   game.lastCombatT = game.runTime;
   let damage = amount;
+  let reductionFraction = 0;
   for (const power of game.engine.powers as PowerRef[]) {
-    if (power.spec.damageReduction) damage *= 1 - power.spec.damageReduction;
+    if (power.spec.damageReduction) {
+      reductionFraction = 1 - (1 - reductionFraction) * (1 - power.spec.damageReduction);
+    }
+  }
+  // Ancient Bark (design doc §8.3): a flat relic-granted reduction, stacked
+  // the same way as Powers — still subject to the cap below, which is the
+  // "respect the global damage-reduction cap" the card text asks for
+  for (const relic of game.relics) {
+    if (relic.stats?.damageReductionFlat) {
+      reductionFraction = 1 - (1 - reductionFraction) * (1 - relic.stats.damageReductionFlat);
+    }
+  }
+  // design doc §15: combined damage reduction from every source (Powers,
+  // relics) may never exceed this cap, so stacking mitigation can't approach
+  // invulnerability — relics may raise the cap itself (game.damageReductionCap)
+  // but MAX_DAMAGE_REDUCTION remains the floor a fresh run starts at
+  damage *= 1 - Math.min(reductionFraction, game.damageReductionCap);
+  // Veteran's Instinct: the first Heavy hit (10+ raw damage) each encounter
+  // is reduced 30% (reset by relicMechanics.ts's resetOutsideCombat)
+  if (!game.relicState.veteransInstinctUsed && amount >= 10 && game.relics.some((r) => r.id === 'veterans_instinct')) {
+    game.relicState.veteransInstinctUsed = true;
+    damage *= 0.7;
   }
   if ((game.core.active.deathlyPact || 0) > 0 &&
       (amount >= 12 || player.hp - damage < player.maxHp * 0.25)) {
     if (game.summons.length > 0) {
-      let oldest = 0;
-      for (let i = 1; i < game.summons.length; i++) {
-        if (game.summons[i].t > game.summons[oldest].t) oldest = i;
-      }
-      const summon = game.summons.splice(oldest, 1)[0];
+      const summon = game.summons.splice(oldestSummonIndex(game.summons), 1)[0];
+      game.bus.emit(EVT.summonSacrificed, { summon });
       for (const enemy of enemiesIn(game, summon.x, summon.y, 100)) {
         damageEnemy(game, enemy, 16, { color: '#a77ac7' });
       }
@@ -336,6 +391,16 @@ export function damagePlayer(
     for (const enemy of enemiesIn(game, player.x, player.y, 130)) damageEnemy(game, enemy, 12, { color: '#ffd97a' });
     game.engine.gainFlow(1, 'guarded_stance');
     game.core.cooldowns.guardedStance = 2;
+  }
+  // Living Bark: "briefly root attackers" — approximate the attacker as the
+  // nearest enemy to the hit's source position, rate-limited so continuous
+  // contact damage doesn't re-root every frame
+  if ((game.core.active.livingBark || 0) > 0 && (game.core.cooldowns.livingBark || 0) <= 0) {
+    const attacker = nearestEnemy(game, sourceX ?? player.x, sourceY ?? player.y, undefined, 140);
+    if (attacker) {
+      attacker.root = Math.max(attacker.root, 0.6);
+      game.core.cooldowns.livingBark = 1.5;
+    }
   }
   if (player.armor > 0) {
     const absorbed = Math.min(player.armor, damage);
@@ -367,12 +432,23 @@ export function damagePlayer(
   }
   game.bus.emit(EVT.playerHit, { amount: damage });
   if (player.hp <= 0) {
+    // The Undying Ember: once per world, survive lethal damage at 1 HP
+    if (!game.relicState.undyingEmberUsed && game.relics.some((r) => r.id === 'the_undying_ember')) {
+      game.relicState.undyingEmberUsed = true;
+      player.hp = 1;
+      player.iframes = Math.max(player.iframes, 1.2);
+      floater(game, player.x, player.y - 40, 'THE EMBER HOLDS', '#ff8a4a', 15);
+      return;
+    }
     player.hp = 0;
     game.state = 'gameover';
     sfx('death');
   }
 }
 
+// returns the actual damage applied (see damageEnemy) so callers that need
+// the real number (lifesteal, crit-damage-based relics) don't have to
+// re-derive an approximation of mark/crit/rounding themselves
 export function hitEnemy(
   game: CombatState,
   enemy: EnemyState,
@@ -380,51 +456,63 @@ export function hitEnemy(
   context: CombatCtx,
   effect: HitSpec,
   opts: DamageOpts = {},
-): void {
+): number {
   let critChance =
     (effect.critChance || 0) + (context.buffs.critChance || 0);
   if (enemy.mark && enemy.mark.t > 0 && enemy.mark.crit) {
     critChance += enemy.mark.crit;
   }
   const crit = game.rng.chance(critChance);
-  if (crit) {
-    const history = game.core.recentCrits.get(enemy.uid) || [];
-    history.push(game.runTime);
-    game.core.recentCrits.set(enemy.uid, history);
-  }
-  if (context.basic && game.playerClass === 'warrior' &&
-      (game.core.active.bloodRage || 0) > 0 && (game.core.cooldowns.bloodRage || 0) <= 0) {
-    game.engine.gainFlow(1, 'blood_rage');
-    game.core.cooldowns.bloodRage = 1;
-  }
-  if (context.basic && (game.playerClass === 'mage' || game.playerClass === 'warlock')) {
-    game.resourceMeters.hitCount += 1;
-    const threshold = game.playerClass === 'mage' ? 4 : 3;
-    if (game.resourceMeters.hitCount >= threshold) {
-      game.resourceMeters.hitCount = 0;
-      game.engine.gainFlow(1, game.playerClass === 'mage' ? 'arcane_bolt' : 'eldritch_bolt');
+  // relic-sourced damage never grants on-hit resources or feeds crit-chain
+  // tracking, so a relic burst can't recursively trigger another relic or a
+  // class's on-hit resource gain (design doc §3.5/§14) — everything that
+  // must skip for relic damage lives in this one block, not scattered guards
+  const relicSourced = !!context.relicId;
+  if (!relicSourced) {
+    if (crit) {
+      const history = game.core.recentCrits.get(enemy.uid) || [];
+      history.push(game.runTime);
+      game.core.recentCrits.set(enemy.uid, history);
+    }
+    if (context.basic && game.playerClass === 'warrior' &&
+        (game.core.active.bloodRage || 0) > 0 && (game.core.cooldowns.bloodRage || 0) <= 0) {
+      game.engine.gainFlow(1, 'blood_rage');
+      game.core.cooldowns.bloodRage = 1;
+    }
+    if (context.basic && (game.playerClass === 'mage' || game.playerClass === 'warlock')) {
+      game.resourceMeters.hitCount += 1;
+      const threshold = game.playerClass === 'mage' ? 4 : 3;
+      if (game.resourceMeters.hitCount >= threshold) {
+        game.resourceMeters.hitCount = 0;
+        game.engine.gainFlow(1, game.playerClass === 'mage' ? 'arcane_bolt' : 'eldritch_bolt');
+      }
+    }
+    if (!context.basic) {
+      const steal = (game.engine.powers as PowerRef[]).reduce((sum, power) => sum + (power.spec.cardLifeSteal || 0), 0);
+      if (steal > 0) game.player.hp = Math.min(game.player.maxHp, game.player.hp + rawDamage * context.dmgMult * steal);
+    }
+    if (crit && game.playerClass === 'rogue' && game.resourceMeters.critCd <= 0) {
+      game.engine.gainFlow(1, 'critical_hit');
+      game.resourceMeters.critCd = 2;
     }
   }
-  if (!context.basic) {
-    const steal = (game.engine.powers as PowerRef[]).reduce((sum, power) => sum + (power.spec.cardLifeSteal || 0), 0);
-    if (steal > 0) game.player.hp = Math.min(game.player.maxHp, game.player.hp + rawDamage * context.dmgMult * steal);
-  }
-  if (crit && game.playerClass === 'rogue' && game.resourceMeters.critCd <= 0) {
-    game.engine.gainFlow(1, 'critical_hit');
-    game.resourceMeters.critCd = 2;
-  }
-  damageEnemy(game, enemy, rawDamage * context.dmgMult, {
+  const applied = damageEnemy(game, enemy, rawDamage * context.dmgMult, {
     crit,
     color: ELEMENT_COLORS[context.def.element],
     ...opts,
   });
-  if (enemy.dead) return;
+  if (!relicSourced) {
+    game.bus.emit(EVT.enemyHit, { enemy, dmg: applied, basic: !!context.basic });
+    if (crit) game.bus.emit(EVT.criticalHit, { enemy, dmg: applied });
+  }
+  if (enemy.dead) return applied;
   if (effect.status) {
     applyStatus(game, enemy, effect.status[0], effect.status[1]);
   }
   for (const status of context.buffs.addStatus || []) {
     applyStatus(game, enemy, status[0], status[1]);
   }
+  return applied;
 }
 
 export function aimAngle(
@@ -464,7 +552,11 @@ export function chainFrom(
     // endpoint impact: star flash, sparks, brief circular refraction
     impact(game, current.x, current.y, ELEMENT_COLORS.lightning);
     ringFx(game, current.x, current.y, current.r + 10, ELEMENT_COLORS.lightning, 0.22);
-    hitEnemy(game, current, spec.dmg, context, spec);
+    const applied = hitEnemy(game, current, spec.dmg, context, spec);
+    if (spec.lifesteal) {
+      const player = game.player;
+      player.hp = Math.min(player.maxHp, player.hp + applied * spec.lifesteal);
+    }
     previousX = current.x;
     previousY = current.y;
     let next: EnemyState | null = null;

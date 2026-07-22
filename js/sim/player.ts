@@ -21,7 +21,9 @@ export function tickResourceRegen(game: GameState, dt: number): void {
   if (!isActiveCombat(game)) return;
   rm.regenT -= dt;
   if (rm.regenT <= 0) {
-    rm.regenT = CLASSES[game.playerClass].resource.regenInterval;
+    // The Mirror of Echoes (design doc §10.5): passive resource regen -25%
+    const mirrorPenalty = game.relics.some((r) => r.id === 'the_mirror_of_echoes') ? 1.333 : 1;
+    rm.regenT = CLASSES[game.playerClass].resource.regenInterval * mirrorPenalty;
     game.engine.gainFlow(1, 'passive_combat');
   }
 }
@@ -142,7 +144,13 @@ export function performOverrideDash(game: GameState, ov: DashOverride): void {
     });
   }
   if (s.kind === 'blink') {
-    if (s.untargetable) p.untargetable = Math.max(p.untargetable, s.untargetable);
+    // Black Veil (design doc §6.1, revised): Shadowstep's decoy — extends
+    // the untargetable window instead of adding real AI-retargeting, so
+    // "enemies prioritize the decoy" and "the player takes no hits" land on
+    // the same observable outcome without touching every enemy AI file
+    const blackVeil = ov.def.id === 'shadowstep' && game.relics.some((r) => r.id === 'black_veil');
+    const untargetable = blackVeil ? 1.5 : s.untargetable;
+    if (untargetable) p.untargetable = Math.max(p.untargetable, untargetable);
     if (s.empower) {
       p.empower = { ...s.empower };
       floater(game, p.x, p.y - 30, 'EMPOWERED', ov.color, 12);

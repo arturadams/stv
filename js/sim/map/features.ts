@@ -90,8 +90,9 @@ export function campCleared(game: FeatureState, camp: Camp): void {
     });
   }
   game.banner = { title: 'CAMP CLEARED', sub: '', t: 1.5 };
-  game.gold += 15;
-  floater(game, camp.x, camp.y - 40, '+15◈', '#ffd97a', 14);
+  const campGold = Math.round(15 * game.goldMult);
+  game.gold += campGold;
+  floater(game, camp.x, camp.y - 40, `+${campGold}◈`, '#ffd97a', 14);
   ringFx(game, camp.x, camp.y, camp.r, '#ffd97a', 0.8);
   if (game.rng.chance(0.5)) {
     offerReward(game, makeCardReward(game), 'The hoard yields a card');
@@ -162,7 +163,7 @@ export function bossCleared(game: FeatureState): void {
   game.activeBoss = null;
   game.bossesSlain++;
   game.worldBossesSlain++;
-  game.gold += 40;
+  game.gold += Math.round(40 * game.goldMult);
   game.player.hp = Math.min(game.player.maxHp, game.player.hp + 30);
   // the court dissolves with its ruler, and the field rests a breath before
   // ambient pressure resumes
@@ -273,8 +274,9 @@ export function updateWorldFeatures(game: FeatureState, dt: number): void {
           });
         }
         player.hp = Math.min(player.maxHp, player.hp + 10);
-        game.gold += 15;
-        floater(game, player.x, player.y - 30, 'CACHE +15◈', '#ffd97a', 14);
+        const cacheGold = Math.round(15 * game.goldMult);
+        game.gold += cacheGold;
+        floater(game, player.x, player.y - 30, `CACHE +${cacheGold}◈`, '#ffd97a', 14);
       }
       sfx('reward');
     }
