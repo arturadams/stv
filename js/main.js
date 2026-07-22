@@ -4,6 +4,9 @@ import { render } from './render.js';
 import { initUI, updateUI, isBuildBoardOpen, toggleBuildBoard } from './ui.js';
 import { initAudio, toggleMute } from './audio.js';
 import { initTouch } from './touch.js';
+import pkg from '../package.json' with { type: 'json' };
+
+console.log(`Arcana Engine v${pkg.version}`);
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');

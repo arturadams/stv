@@ -97,3 +97,22 @@ js/main.js    loop + input
 the smoke tests in development run full simulations for every class and exercise all 154
 cards, both encounter paths (duel & party), the fallback guardian, and a
 boss gate, end to end.
+
+## Versioning
+
+`package.json`'s `version` field is the single source of truth for the
+build version. `js/main.js` logs it to the console on load
+(`Arcana Engine v${pkg.version}`), so any running build — a browser tab, a
+bug report, a screenshot — can be tied back to a specific point in history.
+
+**Bump `version` in the same commit as any functional change** (new/changed
+gameplay, cards, relics, balance, UI, or bug fixes). Follow semver:
+
+- **patch** (`0.1.0` → `0.1.1`) — bug fixes, balance tweaks, small tuning
+- **minor** (`0.1.0` → `0.2.0`) — new content or features (cards, relics,
+  classes, worlds, systems)
+- **major** (`0.x.y` → `1.0.0`) — reserved for the first non-prototype
+  release; breaking save/deck-format changes before then still bump minor
+
+Docs-only or tooling-only changes (README, comments, CI config) don't need a
+bump.
