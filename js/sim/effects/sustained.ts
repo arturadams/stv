@@ -4,7 +4,8 @@ import { registerEffect } from './registry.js';
 
 registerEffect('sustained', (game, eff, ctx) => {
   game.sustains.push({
-    def: ctx.def, ctx, t: 0, dur: eff.dur * (1 + 0.15 * (ctx.lvl || 0)), tick: eff.tick, tickT: 0, do: eff.do,
+    def: ctx.def, ctx, t: 0,
+    dur: eff.dur * (ctx.upgradeRank === 1 ? 1.15 : ctx.upgradeRank === 2 ? 1.3 : 1), tick: eff.tick, tickT: 0, do: eff.do,
     color: colorOf(ctx.def),
   });
   game.engine.sustainedActive = true;

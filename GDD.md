@@ -1,12 +1,12 @@
 # Arcana Engine — Complete Game Specification
 
-> **Design review dossier** · branch `ts-refactor` · commit `8a627e1` · 2026-07-11 · tests **100/100 passing** (20 files)
+> **Design review dossier** · branch `rework` · Card System v2
 >
 > *"Your deck is alive. Your cards become reality."* — a real-time deck-building action roguelite where the hero fights on their own and the deck transforms **how**.
 >
 > Run it: `npm start` (Vite dev server). Every number in this document is sourced from the game's data files (`js/data/*`) and simulation code — file references included. A shareable web version with the same content lives at <https://claude.ai/code/artifact/e616607d-01a9-47fd-b265-d03c56cbe223>.
 
-**At a glance:** 3 classes · 109 cards · 5 worlds · 12 bosses · 30 field enemies · 8 relics · 16 biomes
+**At a glance:** 6 classes · 154 cards · 5 worlds · 12 bosses · 30 field enemies · 8 relics · 16 biomes
 
 | § | Section |
 |---|---|
@@ -16,7 +16,7 @@
 | 4 | [Classes & basic attacks](#4--classes--basic-attacks) |
 | 5 | [Combat math](#5--combat-math) |
 | 6 | [The two economies](#6--the-two-economies) |
-| 7 | [Card library](#7--card-library--109-cards) |
+| 7 | [Card library](#7--card-library--154-cards) |
 | 8 | [Relics](#8--relics--permanent-run-modifiers) |
 | 9 | [Worlds, threat & the map](#9--worlds-threat--the-procedural-map) |
 | 10 | [Enemy roster](#10--enemy-roster) |
@@ -39,29 +39,29 @@
 **Session shape.** Endless-realm structure rather than stage-based: infinite procedural map per world, three boss gates to fall before the portal onward opens, difficulty ("threat") that never resets. A run ends only in death; meta-progression persists which worlds — and therefore which card sets — you have reached.
 
 ![Title screen](docs/img/01-title.jpg)
-*Title screen. Class select is the first decision of a run: Mage / Warrior / Rogue, each with its basic attack and resource summarized up front.*
+*Title screen. Class select is the first decision of a run; each class has its basic attack and resource summarized up front.*
 
 **Design pillars** (from `roadmap.md`, enforced in code):
 
 - **Cards shape the fight; they don't replace every hit.** The basic attack is the constant action layer and is explicitly not a card.
 - **Readable rhythm.** No card resolves in under 0.3s unless it is a modifier/engine; every resolve is followed by a 0.55s "breath"; big spells telegraph with rune-circle previews.
 - **No waiting screens.** Matchmaking that fails produces a guardian fight; a missed portal re-manifests near the player; drafts happen in-world.
-- **Class identity through mechanics**, not stat deltas: Attunements transform, Rage accelerates, Opportunity quickens.
+- **Class identity through mechanics**, not stat deltas: Mana enables rituals, Rage rewards engagement, Focus rewards precision, Souls reward kills, Spirit rewards close combat, and Corruption rewards dangerous pressure.
 
 ## 2 · Run structure & core loop
 
 ```
-Move → basic attack fires itself → build FLOW → cards auto-draw into the QUEUE
+Move → basic attack fires itself → build CLASS RESOURCE → cards auto-draw into the QUEUE
      → channel → resolve → reposition → repeat
 
 Explore → camps / shrines / caches / sanctuaries → 3 boss gates → timed portal
         → next world (threat never resets) → … → death → new run
 ```
 
-**Run setup.** Pick a class, then a setup screen rolls a starting hand of **9 Commons + 1 Uncommon** — class-focused, playability-guaranteed (two Powers, a Spell, a Skill of your school; max 2 copies of any card). Reroll is free and unlimited. Any world you have ever reached can be selected as the starting world (`js/sim/run/lifecycle.ts`).
+**Run setup.** Pick a class, then review its fixed **eight-card starting deck**. Any world you have reached can be selected as the starting world (`js/sim/run/lifecycle.ts`). Decks may grow to 12 cards, with at most two copies of one card and a six-card floor.
 
 ![Run setup](docs/img/02-setup.jpg)
-*"Prepare the Ritual." World select (all five worlds listed; reached worlds playable directly) above the rolled starting hand. Card frames show Flow cost (top-left badge) and school glyph.*
+*"Prepare the Ritual." World select (all five worlds listed; reached worlds playable directly) above the fixed starting deck. Card frames show class-resource cost and school glyph.*
 
 **Controls.** WASD/arrows to move · Space to dash (0.9s cooldown, 0.3s of i-frames — dodging through a hit scores a **Perfect Dodge**) · P/Esc pause · M mute. Mobility cards (Teleport, Shadowstep, Charge…) overwrite the Dash for ~8s. On touch devices: virtual joystick + dash and pause buttons.
 
@@ -74,22 +74,19 @@ The pipeline (`js/engine.js`, fully deterministic under a seeded RNG) is the gam
 | Parameter | Value | Notes |
 |---|---|---|
 | Auto-draw interval | 1.0s | First draw 0.5s into the run; draw stops while the queue is full. |
-| Queue capacity | 6 | Visible as six card slots in the HUD console. |
-| Flow (the mana) | 4 start / 10 max | Cards cost 0–6. A card the engine can't afford **blocks the queue** (shown "starved") until Flow arrives or the queue is purged. |
+| Queue capacity | 6 internal | The HUD exposes only the current card and next two cards. |
+| Class resource | 0–10 | Each class has one named casting resource. Normal enabled cards cost 1–5; passive combat generation prevents indefinite stalls. |
 | Post-resolve gap | 0.55s | The "breath" — deliberate readability pause between casts. |
 | Combo | 4s window | Consecutive resolves chain a combo counter; every 5th link grants +2 Flow. |
-| Channel time | 0.3–2.6s | dur = card.channel × modifier buffs × relics × one-shot haste × class resource × Time-Warp haste ÷ flush. |
+| Channel time | 0.3–2.6s | Defined by card data and persistent buffs. Normal cards do not manipulate other cards or the queue. |
 
-**Six card behaviors:**
+**Three player-facing card types:**
 
-| Behavior | Count | Timing | What it does |
-|---|---:|---|---|
-| Power | 18 | short channel → 7–10s active | Modifies the basic attack while active (transform, add status, widen arc, extra shots). Re-applying refreshes rather than stacks; shown as timed badges over the console. |
-| Skill | 27 | 0.3–0.6s channel | Fast tactical action: armor, traps, blinks, small bursts. Mobility skills overwrite the Dash for ~8s. |
-| Spell · AoE | 18 | 1.1–2.6s channel | Rune-circle preview burns on the floor during the channel (following you for self-cast), then one big impact. The lure-enemies-into-the-circle minigame. |
-| Spell · Sustained | 14 | ~1s channel → 1.5–3s continuous | Whirlwinds, flame streams, knife storms. Blocks the pipeline while running — a real tempo cost. |
-| Trigger | 8 | 25–30s enchant | Event-reactive: on perfect dodge / status applied / kill / card resolved. Shown as HUD chips with timers. |
-| Engine / Modifier | 24 | instant-ish | Queue and Flow manipulation: draw, duplicate-next, echo-last, flush (queued cards channel at ~3× speed), purge (refund half), buff-next-card modifiers. |
+| Type | Timing | What it does |
+|---|---|---|
+| Power | short channel → 4–10s active | Visibly changes the character or basic attack. |
+| Technique | fast | Provides defense, mobility, setup, or a targeted action. |
+| Signature | medium to long | Creates a major attack, summon, or battlefield-control event. |
 
 ![HUD anatomy](docs/img/03-world1-mage.jpg)
 *The HUD in combat (Mage, World I). Bottom console: deck pile → six queue slots (cost badges; greyed = can't afford yet) → active slot → discard, over the HP bar (green), Flow bar (0/10) and gold. Above it: active Power badges with duration bars ("Frost Attunement 5.6s"), the Dash-override chip ("DASH → Teleport 7.5s") and Trigger chips ("Pyromancy 17s"). Top: biome label + run clock; combo counter center. Right: a card pop announcing the cast.*
@@ -100,17 +97,26 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 
 | | ✦ Mage | ⚔ Warrior | 🜏 Rogue |
 |---|---|---|---|
-| **Identity** | Arcane bolts · Attunements · Ritual spells | Melee arcs · Rage · Shockwaves | Fast knives · Traps · Opportunity |
+| **Identity** | Arcane bolts · Mana · Ritual spells | Melee arcs · Rage · Shockwaves | Fast knives · Traps · Focus |
 | **Basic attack** | Arcane Bolt — 6 dmg · every 0.55s · range 470 · 600 u/s | Blade Swing — 10 dmg · every 0.8s · reach 125 · 100° arc · knockback 60 | Swift Knife — 5 dmg · every 0.4s · range 430 · 780 u/s · 10% base crit |
-| **Resource** | None — Mage state is *which Attunement Powers are active*: fire (exploding bolts + Burn), frost (Chill), storm (chain lightning), plus later phoenix / tide / resonant variants. Elemental Cycle rotates them for free. | **RAGE (0–100)**: +2 per swing +2 per target hit, +6 per close kill (<170 px), +10 when damaged, +4 when armor blocks. Decays 4/s after 2.5s. Warrior cards channel up to **80% faster** at full Rage; swings hit up to **+50%** harder. | **OPPORTUNITY (0–8 pips)**: +1 per kill (+2 if poisoned), +1 per perfect dodge, +1 per trap trigger. Each Rogue card *spends one pip* to channel at 0.6× time; every held pip adds +3% crit to basics. |
+| **Resource** | **MANA (0–10)**: starts at 6; +1 every 1.1s in combat, +1 every fourth landed bolt, +2 on perfect dodge. | **RAGE (0–10)**: starts at 3; +1 every 2.5s in combat, every third landed swing, Armor block, health-damage event, and perfect dodge. Held Rage can add up to 50% basic damage. | **FOCUS (0–10)**: starts at 4; +1 every 1.7s in combat, critical hit, trap trigger, or poisoned kill; +2 on perfect dodge. Held Focus increases basic crit chance. |
 
-**Fixed starting decks** (pre-roll reference — the rolled hand replaces these in normal play; they remain the deterministic default used by tests and as the template of "playable": 2 Powers, a Spell, a Skill, plus engine glue):
+| | ☠ Necromancer | ❧ Druid | ⛧ Warlock |
+|---|---|---|---|
+| **Identity** | Bone shards · Undead servants · Souls | Wild claws · Shapeshifting · Spirit | Eldritch bolts · Curses · Corruption |
+| **Basic attack** | Bone Shard — 7 dmg · every 0.62s · range 460 · 560 u/s | Wild Claw — 9 dmg · every 0.7s · reach 115 · 90° arc · knockback 45 | Eldritch Bolt — 8 dmg · every 0.72s · range 500 · 520 u/s |
+| **Resource** | **SOULS (0–10)**: starts at 4; +1 every 1.9s in combat, +1 per kill, +1 on perfect dodge. Held Souls add up to 40% basic damage. | **SPIRIT (0–10)**: starts at 5; +1 every 1.6s in combat, every third landed claw, and +2 on perfect dodge. Held Spirit adds up to 25% basic damage. | **CORRUPTION (0–10)**: starts at 4; +1 every 1.9s in combat, every fourth landed bolt, or health-damage event; +1 on perfect dodge. Held Corruption adds up to 40% basic damage; there is no automatic backlash. |
 
-| Class | Deck (10 cards) |
+**Fixed starting decks** (the normal run-start path; eight cards, at most two copies):
+
+| Class | Deck (8 cards) |
 |---|---|
-| **Mage** | Flame Attunement, Flame Attunement, Frost Nova, Arc Lightning, Mana Burst, Teleport, Frost Attunement, Draw, Battery, Quickcast |
-| **Warrior** | Cleaving Stance, Cleaving Stance, Charge, Whirlwind, Shield Wall, Thunder Hammer, Iron Skin, Draw, Battery, Stabilize |
-| **Rogue** | Poisoned Blades, Poisoned Blades, Springblade Trap, Fan of Knives, Shadowstep, Smoke Bomb, Deathmark, Draw, Battery, Quickcast |
+| **Mage** | Mana Burst ×2, Frost Nova ×2, Arc Lightning, Teleport, Rune Prison, Arcane Mirror |
+| **Warrior** | Iron Skin ×2, Cleaving Stance, Charge, Whirlwind, Riposte, Thunder Hammer, Execute |
+| **Rogue** | Poisoned Blades ×2, Shadowstep, Springblade Trap, Backstab, Smoke Bomb, Deathmark, Fan of Knives |
+| **Necromancer** | Bone Legion ×2, Raise Dead, Bone Spear, Grave Grasp, Soul Ward, Plague Ground, Wraith Walk |
+| **Druid** | Wolf Aspect ×2, Bear Aspect, Pounce, Barkskin, Renewal, Entangling Roots, Hurricane |
+| **Warlock** | Fel Infusion ×2, Cursed Bolts, Shadow Barrage, Hellfire, Demon Skin, Fear, Life Drain |
 
 ## 5 · Combat math
 
@@ -119,17 +125,17 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | Status | DPS / stack | Duration | Notes |
 |---|---:|---:|---|
 | Burn | 3.0 | 3s | Fire school currency; triggers Pyromancy / Ember Seal. |
-| Poison | 1.6 | 6s | Rogue currency; poisoned kills grant +2 Opportunity, feed Toxic Reaction spread and Assassin's Needle. |
+| Poison | 1.6 | 6s | Rogue and Necromancer setup; poisoned kills grant +1 Focus to Rogue. |
 | Bleed | 2.2 | 4s | Pure damage, no synergy hooks yet. |
 | Chill | 0 | 2.2s | Flat 50% slow. **Bosses/rivals cap at 1 stack** — the only status with a boss safeguard. |
 
 **Rules that matter:**
 
-- **Crits** deal ×2 and come from card specs, Opportunity pips, Deathmark/Ambush, Shadowstep empowerment. Enemy damage cannot crit.
+- **Crits** deal ×2 and come from card specs, held Focus, Deathmark/Ambush, and Shadowstep empowerment. Enemy damage cannot crit.
 - **Armor** is a flat consumable shield (Shield Wall 25, Iron Skin 12…), absorbing damage 1:1 before HP; blocking feeds Warrior Rage. No cap in code — armor stacks indefinitely.
 - **Deathmark**: marked enemy takes ×1.35 damage and +25% crit chance from you for 8s.
 - **Control**: freeze and stun halt enemies entirely; root pins in place but lets them attack; knockback is physics velocity. All of these *do* work on bosses.
-- **Perfect Dodge** (i-frame passes through a hit): +2 Flow, +1 Opportunity, 0.22s slow-motion, and it feeds Riposte / Evasion triggers.
+- **Perfect Dodge** (i-frame passes through a hit): restores the class-specific amount (1–2), triggers 0.22s slow-motion, and feeds reactive Powers.
 - **Player i-frames**: 0.5s after taking a hit; enemy contact re-hits every 0.8s; ground hazards tick every 0.55s standing inside.
 - **Card levels** (★, via Sanctuary combining, max Lv.3): **+25% damage, +8% area, +15% durations per star**.
 - **Hitstop & shake**: elite/boss kills freeze the sim ~0.09s; screenshake budgeted per effect — juice is code-driven, not sprite-driven.
@@ -141,7 +147,7 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | Source | Amount | Notes |
 |---|---|---|
 | Shard pickups | +1 | Every enemy drops 1–3 shards (elites 10, bosses 12–26); magnetized within 120 px. |
-| Perfect dodge | +2 | Plus 1 Opportunity for Rogue. |
+| Perfect dodge | +1 or +2 | Amount is defined per class; Mage, Rogue, and Druid gain 2, while Warrior, Necromancer, and Warlock gain 1. |
 | Living dangerously | +1 / 2s | Continuous while an enemy is within 230 px — rewards fighting close, punishes kiting at range. |
 | Combo | +2 | Every 5th resolve inside a rolling 4s chain. |
 | Flow shrine | +3 | Map feature, 12s per-shrine cooldown. |
@@ -162,17 +168,20 @@ Player chassis is shared: `100 HP · speed 235 · radius 14 · dash 0.9s cd / 0.
 | Card prices | 25 / 40 / 70 / 120 | Common / Uncommon / Rare / Legendary at any merchant. |
 | Selling | ½ price + 15·★ | Never below a 6-card deck. |
 
-## 7 · Card library — 109 cards
+## 7 · Card library — 154 cards
 
-Every card is pure data flowing through one effect resolver (`js/sim/effects/`) — no card has bespoke logic, which is why the library scaled to 109 without code growth. The base library is 60 cards; each authored world adds a 16–17 card set (4 per school + Colorless) that only becomes obtainable on arrival there and stays meta-unlocked afterwards (§14).
+Every card is pure data flowing through one effect resolver (`js/sim/effects/`). The registry contains 154 cards for migration compatibility; Card System v2 enables a focused pool of 60 cards—ten per class—and excludes Colorless and queue-manipulation cards from normal pools. Authored-world cards remain registered for later adaptation.
 
 | School | Common | Uncommon | Rare | Legendary | Total |
 |---|---:|---:|---:|---:|---:|
 | Mage | 10 | 11 | 6 | 1 | **28** |
 | Warrior | 10 | 11 | 4 | 1 | **26** |
 | Rogue | 9 | 13 | 5 | 1 | **28** |
+| Necromancer | 7 | 5 | 2 | 1 | **15** |
+| Druid | 6 | 6 | 2 | 1 | **15** |
+| Warlock | 6 | 6 | 2 | 1 | **15** |
 | Colorless | 8 | 13 | 2 | 4 | **27** |
-| **Total** | 37 | 48 | 17 | 7 | **109** |
+| **Total** | 56 | 65 | 23 | 10 | **154** |
 
 ![Card draft](docs/img/04-draft.jpg)
 *A draft. Three weighted options (§14); declining is a real choice — "rest instead" heals +15 HP.*
@@ -625,16 +634,16 @@ Warded hearths (r190) where enemies cannot follow and ambient spawning pauses. E
 
 ## 14 · Meta-progression & draft weighting
 
-**The single meta fact:** the highest world ever reached, persisted to `localStorage`. Reaching a world once unlocks its card set for every later run — including a chance to see those cards back in World I drafts, shops, and rolled starting hands. There is no other currency, unlock tree, or account progression.
+**The single meta fact:** the highest world ever reached, persisted to `localStorage`. Reaching a world once unlocks its card set for every later run, including a chance to see adapted cards back in World I drafts and shops. There is no other currency, unlock tree, or account progression.
 
-**Draft weights** (drafts, merchant stock, rolled hands all share this):
+**Draft weights** (drafts and merchant stock share this):
 
 ```
 base:   Common 55 · Uncommon 30 · Rare 12 · Legendary 3
 × 1.6 — current world's own set (W-II+): the fresh set is favored
 × 0.3 — meta-unlocked set from a LATER world ("bleed-down": a chance, not the norm)
 × 0.35 — Colorless glue · × 1.0 — your school · × 0 — other schools (× 0.2 with Prismatic Codex)
-rolled hands additionally: later-world cards × 0.4, max 2 copies, 2 Powers + Spell + Skill guaranteed
+fixed starts: 8 curated cards, max 2 copies; later-world cards enter only through rewards and shops
 ```
 
 **Draft sources**: camp clear (50%), treasure cache (60%), duel spoils (the rival's actual cards), boss gates (relics instead). Declining any draft heals +15 HP — a real tempo choice on a healthy deck.
@@ -664,11 +673,11 @@ Facts from the code, framed as the discussion agenda. None of these are bugs; al
 2. **Party Up is mechanically dominated by Fight.** The ally is an untargetable spirit for 90s while enemy pressure rises (×1.7 spawns, ×1.25 HP) — you pay in danger for company. Fight pays a card + 30◈ + 25 HP + 5 Flow. If Party should be a real choice, it needs a payoff (shared loot? draft on parting? ally soaking aggro?).
 3. **The guardian fallback is nearly unreachable.** Search success ≈73%/s against a 9s timeout, so the "no rival answered" elite encounter — authored content with its own banner — fires almost never. If it's worth keeping, drop the per-second chance so the timeout path breathes.
 4. **Player HP never scales.** 100 max HP from World I to V; only heal events (+40 on transition, +30 boss, sanctuary/cache/rest) push back. With W-IV touch damage at 11–24 and threat-scaled density, the endgame HP model is effectively "don't get hit ×3." If intended (dodge mastery as the progression), say so loudly; otherwise max-HP relics/levels are the obvious lever.
-5. **Entering later worlds directly skips the curve.** World-select starts threat at the world multiplier with zero time/kills — a fresh 10-card Common deck against 34-HP swarms and 100-HP chargers (W-IV) is a very different game than arriving with a 25-card leveled deck. Consider scaling the rolled hand (or starting gold) with the chosen world.
+5. **Entering later worlds directly skips the curve.** World-select starts threat at the world multiplier with zero time/kills — a fixed eight-card deck against 34-HP swarms and 100-HP chargers (W-IV) is a different game than arriving with a developed deck. Consider scaling starting gold or granting a later-world draft.
 6. **The relic pool (8) exhausts in one world.** Three gates per world each offer 3-of-remaining; by World II gates offer near-empty choice and fall back to card drafts. The relic system reads as a placeholder pool awaiting content — or gates could sometimes pay ◈/levels instead.
 7. **Boss CC: only chill is capped.** Freeze (Frost Nova/Crush Depth), stun (Earthquake/Thunderclap), and root (Rune Prison) all land full-strength on bosses. A leveled Frost Nova (1.8s ×1.3) can hold the Reliquary open through its seal or pin the Carillon inside its own peal. Decide whether hard CC on bosses is a build reward or needs diminishing returns.
 8. **Queue starvation is the real difficulty of expensive decks**, and it's under-taught. A cost-6 Legendary at queue front blocks everything until 6 Flow exists (Purge is the only release valve, itself a Rare). The starved-card dimming shows it, but nothing explains it. A one-line tutorial toast — or letting affordable cards behind the front skip ahead — would change how greedy decks feel.
-9. **Free unlimited reroll on the setup screen** lets players fish for god-hands. Cheap to keep, but if the rolled hand is meant to be a constraint, cap rerolls or charge gold.
+9. **Fixed starting decks improve comparison but reduce opening variety.** Keep them during resource balancing; revisit a constrained draft mode only after class cadence is stable.
 10. **Only one boss touches the card system.** The Librarian's queue-theft is the most memorable mechanic in the boss roster precisely because it attacks the game's actual subject. The Antiphon echoing your *cards* (recasting your last resolved spell against you), or the Silence muting a queue slot, would extend that identity into W-IV, where the theme begs for it.
 11. **Bleed has no hooks.** Burn feeds Pyromancy/Ember Seal, poison feeds three systems, chill feeds tide cards — bleed is bare DPS on two cards. Either give it an identity (amplify on-hit? crit synergy?) or fold it into physical.
 12. **Telegraph stacking at high threat** (visible in the W-IV boss capture above): peals + toller rings + echo strikes + hazard pools are all translucent circles in adjacent hues. A severity pass — one shape/color grammar for lethal vs. zone vs. decorative — would protect the readability pillar the game is built on.

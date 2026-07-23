@@ -2,6 +2,9 @@ import type { CardDef, ClassId } from '../types.js';
 import { MAGE_CARDS } from './mage.js';
 import { WARRIOR_CARDS } from './warrior.js';
 import { ROGUE_CARDS } from './rogue.js';
+import { NECROMANCER_CARDS } from './necromancer.js';
+import { DRUID_CARDS } from './druid.js';
+import { WARLOCK_CARDS } from './warlock.js';
 import { COLORLESS_CARDS } from './colorless.js';
 import { WORLD2_CARDS } from './world2.js';
 import { WORLD3_CARDS } from './world3.js';
@@ -11,6 +14,9 @@ const cards: CardDef[] = [
   ...MAGE_CARDS,
   ...WARRIOR_CARDS,
   ...ROGUE_CARDS,
+  ...NECROMANCER_CARDS,
+  ...DRUID_CARDS,
+  ...WARLOCK_CARDS,
   ...COLORLESS_CARDS,
   ...WORLD2_CARDS,
   ...WORLD3_CARDS,
@@ -26,12 +32,19 @@ export const ATTUNEMENT_IDS = [
   'storm_attunement',
 ];
 
-// ── Starting decks per class ──
+// ── Fixed starting decks per class — Card System v2 (rework_cards.md) §15 ──
+// No random rolls: every run of a class begins with exactly this 8-card hand.
 export const STARTING_DECKS = {
-  mage: ['flame_attunement', 'flame_attunement', 'frost_nova', 'arc_lightning',
-    'mana_burst', 'teleport', 'frost_attunement', 'draw', 'battery', 'quickcast'],
-  warrior: ['cleaving_stance', 'cleaving_stance', 'charge', 'whirlwind',
-    'shield_wall', 'thunder_hammer', 'iron_skin', 'draw', 'battery', 'stabilize'],
-  rogue: ['poisoned_blades', 'poisoned_blades', 'trap_card', 'fan_of_knives',
-    'shadowstep', 'smoke_bomb', 'deathmark', 'draw', 'battery', 'quickcast'],
+  mage: ['mana_burst', 'mana_burst', 'frost_nova', 'frost_nova',
+    'arc_lightning', 'teleport', 'rune_prison', 'arcane_mirror'],
+  warrior: ['iron_skin', 'iron_skin', 'cleaving_stance', 'charge',
+    'whirlwind', 'riposte', 'thunder_hammer', 'execute'],
+  rogue: ['poisoned_blades', 'poisoned_blades', 'shadowstep', 'trap_card',
+    'backstab', 'smoke_bomb', 'deathmark', 'fan_of_knives'],
+  necromancer: ['bone_legion', 'bone_legion', 'raise_dead', 'bone_spear',
+    'grave_grasp', 'soul_ward', 'plague_ground', 'wraith_walk'],
+  druid: ['wolf_aspect', 'wolf_aspect', 'bear_aspect', 'pounce',
+    'barkskin', 'renewal', 'entangling_roots', 'hurricane'],
+  warlock: ['fel_infusion', 'fel_infusion', 'cursed_bolts', 'shadow_barrage',
+    'hellfire', 'demon_skin', 'fear', 'life_drain'],
 } satisfies Record<ClassId, readonly string[]>;

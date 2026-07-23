@@ -4,7 +4,7 @@ import type { ArcBasic, ElementId, ProjBasic, ProjectileSpec, StatusApp } from '
 import { wrapAngle } from '../core/math.js';
 import { sfx } from '../audio.js';
 import { hitEnemy, nearestEnemy, spawnPlayerProj, targetable } from './combat.js';
-import { gainRage } from './player.js';
+import { impact, impulse } from './fx.js';
 import type { GameState } from './types.js';
 
 // CardEngine itself isn't typed until R3.6 — this narrows just the shape
@@ -41,9 +41,14 @@ export function updateBasicAttack(game: GameState, dt: number): void {
   p.attackT = base.rate * mods.rateMult;
 
   let dmgMult = mods.dmgMult;
-  if (game.playerClass === 'warrior') dmgMult *= 1 + game.rage / 200; // Rage empowers swings
+  // Resource fill empowers the basic attack too, rescaled to the 0-10 scale
+  // (same +50%/+24% ceilings the old max-100 Rage / max-8 Opportunity gave).
+  if (game.playerClass === 'warrior') dmgMult *= 1 + game.engine.flow / 20;
+  if (game.playerClass === 'necromancer') dmgMult *= 1 + game.engine.flow * 0.04;
+  if (game.playerClass === 'druid') dmgMult *= 1 + game.engine.flow * 0.025;
+  if (game.playerClass === 'warlock') dmgMult *= 1 + game.engine.flow * 0.04;
   let critBonus = 0;
-  if (game.playerClass === 'rogue') critBonus += game.opportunity * 0.03;
+  if (game.playerClass === 'rogue') critBonus += game.engine.flow * 0.024;
   if (p.empower) {
     dmgMult *= p.empower.mult;
     critBonus += p.empower.crit || 0;
@@ -75,11 +80,24 @@ export function updateBasicAttack(game: GameState, dt: number): void {
         e.kt = 0.15;
       }
     }
-    gainRage(game, 2 + hits * 2);
+    if (hits > 0 && (game.playerClass === 'warrior' || game.playerClass === 'druid')) {
+      // Warrior and Druid gain one class resource after every third landed
+      // melee hit. Resource is still paid directly to the card engine.
+      game.resourceMeters.hitCount += hits;
+      while (game.resourceMeters.hitCount >= 3) {
+        game.resourceMeters.hitCount -= 3;
+        game.engine.gainFlow(1, game.playerClass === 'warrior' ? 'melee_swing' : 'basic_hit');
+      }
+    }
     game.fx.push({
       kind: 'arc', x: p.x, y: p.y, ang, arc: half * 2, range: reach,
       color: ELEMENT_COLORS[base.element], t: 0, life: 0.22,
     });
+    if (hits > 0) {
+      // white-hot contact flash + a short directional camera impulse
+      impact(game, p.x + Math.cos(ang) * reach * 0.55, p.y + Math.sin(ang) * reach * 0.55, ELEMENT_COLORS[base.element], ang);
+      impulse(game, ang + Math.PI, Math.min(6, 2 + hits));
+    }
     sfx('slash');
   } else {
     // projectile bolt / knife — possibly transformed by an active Power

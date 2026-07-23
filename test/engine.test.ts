@@ -37,7 +37,7 @@ describe('CardEngine drawing and modifiers', () => {
   it('matches school, category, and tags while consuming only matches', () => {
     const { engine } = makeEngine();
     engine.addModifier(label, { match: { school: 'Mage' }, count: 2, buff: { dmgMult: 2 } });
-    engine.addModifier(label, { match: { cat: 'Spell' }, buff: { channelMult: 0.5 } });
+    engine.addModifier(label, { match: { cat: 'Signature' }, buff: { channelMult: 0.5 } });
     engine.addModifier(label, { match: { tags: ['Frost'] }, buff: { radiusMult: 1.25, critChance: 0.2 } });
     engine.addModifier(label, { match: { school: 'Warrior' }, buff: { costMult: 0 } });
 
@@ -52,7 +52,7 @@ describe('CardEngine drawing and modifiers', () => {
     const { engine } = makeEngine();
     const card = engine.makeCard('meteor');
     engine.flow = 3;
-    engine.addModifier(label, { match: { cat: 'Spell' }, count: 1, buff: { costMult: 0.5 } });
+    engine.addModifier(label, { match: { cat: 'Signature' }, count: 1, buff: { costMult: 0.5 } });
 
     expect(engine.canAfford(card)).toBe(true);
     expect(readCounts(engine.modStack)[0].count).toBe(1);

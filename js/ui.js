@@ -3,14 +3,25 @@
 // Discard, rendered as living arcane artifacts. The new rhythm demands
 // visibility: power badges, duration bars, the active cast slot, card pops.
 
-import { SCHOOL_COLORS, ELEMENT_COLORS, RARITY_COLORS, CLASSES, CARDS, WORLDS } from './data.js';
+import {
+  SCHOOL_COLORS, ELEMENT_COLORS, RARITY_COLORS, CLASSES, CARDS, WORLDS,
+} from './data.js';
 import {
   startRun, applyReward, resolveEncounterChoice, colorOf, prepareRun,
   buyCard, sellCard, combineCards, leaveSanctuary, sellPrice, CARD_PRICES, MAX_CARD_LVL,
+  canAcquireCard, chooseTalent,
 } from './world.js';
 import { initAudio, sfx } from './audio.js';
+import {
+  openBuildBoard, closeBuildBoard, selectBuildTab,
+  isBuildBoardOpen as buildBoardIsOpen,
+} from './buildBoard.js';
 
+import { buildDraftContext, renderReplacementPicker } from './draftPresentation.js';
 const $ = (id) => document.getElementById(id);
+// Card System v2 (rework_cards.md) §10.3/§20: the HUD shows only the
+// current card (the ACTIVE slot) plus this many upcoming cards.
+const VISIBLE_QUEUE_SLOTS = 2;
 let els = {};
 let knownQueueUids = new Set();
 let selectedClass = 'mage';
@@ -21,12 +32,10 @@ let powersSig = '';
 export function initUI(game) {
   els = {
     hpFill: $('hp-fill'), hpText: $('hp-text'), armor: $('armor-chip'),
-    flowFill: $('flow-fill'), flowText: $('flow-text'), flowBar: $('flow-bar'),
     resWrap: $('res-wrap'), resLabel: $('res-label'), resFill: $('res-fill'), resText: $('res-text'),
     powers: $('powers'),
     combo: $('combo'), encounter: $('encounter-label'),
     relics: $('relics'), chips: $('chips'),
-    deckCount: $('deck-count'), discardCount: $('discard-count'),
     queueRow: $('queue-row'), channelSlot: $('channel-slot'), activeName: $('active-name'),
     cardPop: $('card-pop'),
     banner: $('banner'), bannerTitle: $('banner-title'), bannerSub: $('banner-sub'),
@@ -44,6 +53,10 @@ export function initUI(game) {
     tooltip: $('tooltip'), stolen: $('stolen-note'),
     portrait: $('portrait-plate'), portraitGlyph: $('portrait-glyph'), portraitWorld: $('portrait-world'),
     clock: $('run-clock'),
+    overlayBuild: $('build-overlay'), buildTitle: $('build-title'),
+    buildDeck: $('build-deck'), buildTalents: $('build-talents'),
+    buildSynergies: $('build-synergies'), buildHistory: $('build-history'),
+    overlayTalent: $('talent-overlay'), talentOptions: $('talent-options'),
   };
 
   buildClassSelect(game);
@@ -54,11 +67,6 @@ export function initUI(game) {
     pendingRun = prepareRun(game, selectedClass, 1);
     buildSetup(game);
     els.overlaySetup.classList.remove('hidden');
-  });
-  $('reroll-btn').addEventListener('click', () => {
-    sfx('draw');
-    pendingRun = prepareRun(game, pendingRun.classId, pendingRun.world);
-    buildSetup(game);
   });
   $('enter-btn').addEventListener('click', () => {
     els.overlaySetup.classList.add('hidden');
@@ -83,7 +91,19 @@ export function initUI(game) {
     resolveEncounterChoice(game, 'party');
   });
   $('leave-btn').addEventListener('click', () => leaveSanctuary(game));
+  $('pause-build-btn').addEventListener('click', () => openBuildBoard(game));
+  for (const button of document.querySelectorAll('.build-open-btn')) {
+    button.addEventListener('click', () => openBuildBoard(game));
+  }
+  $('build-close-btn').addEventListener('click', closeBuildBoard);
+  for (const button of document.querySelectorAll('[data-build-tab]')) {
+    button.addEventListener('click', () => selectBuildTab(button.dataset.buildTab));
+  }
 }
+export function isBuildBoardOpen() {
+  return buildBoardIsOpen();
+}
+
 
 // ── class selection on the title screen ──
 function buildClassSelect(game) {
@@ -108,7 +128,7 @@ function buildClassSelect(game) {
   }
 }
 
-// ── run setup: the rolled hand + world selection ──
+// ── run setup: fixed starting deck + world selection ──
 function buildSetup(game) {
   const cls = CLASSES[pendingRun.classId];
   els.setupClass.innerHTML = `<span style="color:${cls.color}">${cls.glyph} ${cls.name}</span>`;
@@ -120,7 +140,7 @@ function buildSetup(game) {
     btn.innerHTML = `<span class="wb-sub">${w.sub}</span><span class="wb-name">${w.name}</span>`;
     btn.addEventListener('click', () => {
       sfx('engine');
-      pendingRun = prepareRun(game, pendingRun.classId, w.num); // reroll for the new world's pool
+      pendingRun = prepareRun(game, pendingRun.classId, w.num); // the starting deck is fixed; only the world changes
       buildSetup(game);
     });
     els.worldRow.appendChild(btn);
@@ -136,7 +156,7 @@ function buildSetup(game) {
 }
 
 // ── card element factory ──
-export function buildCardEl(def, size, lvl = 0) {
+export function buildCardEl(def, size, lvl = 1) {
   const el = document.createElement('div');
   el.className = `card ${size} school-${def.school.toLowerCase()} rarity-${def.rarity.toLowerCase()}`;
   const schoolC = SCHOOL_COLORS[def.school];
@@ -145,7 +165,7 @@ export function buildCardEl(def, size, lvl = 0) {
   el.style.setProperty('--elem', elemC);
   el.style.setProperty('--rarity', RARITY_COLORS[def.rarity]);
   const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;
-  const lvlBadge = lvl > 0 ? `<div class="card-lvl">${'★'.repeat(lvl)}</div>` : '';
+  const lvlBadge = `<div class="card-lvl">LV.${lvl}</div>`;
   if (size === 'mini') {
     el.innerHTML = `
       <div class="card-cost">${def.cost}</div>${lvlBadge}
@@ -155,17 +175,25 @@ export function buildCardEl(def, size, lvl = 0) {
     el.innerHTML = `
       <div class="card-topline"><div class="card-cost">${def.cost}</div><div class="card-name">${def.name}</div></div>${lvlBadge}
       <div class="card-art"><span class="card-glyph">${def.glyph}</span></div>
-      <div class="card-type">${def.school} · ${catLabel}</div>
+      <div class="card-type">${def.branch || def.school} · ${catLabel}</div>
       <div class="card-text">${def.text}</div>
       <div class="card-tags">${def.tags.join(' · ')}</div>`;
   }
   return el;
 }
 
+// which class resource a card's cost is paid in — Card System v2 §6
+const RESOURCE_LABEL = {
+  Mage: 'MANA', Warrior: 'RAGE', Rogue: 'FOCUS',
+  Necromancer: 'SOULS', Druid: 'SPIRIT', Warlock: 'CORRUPTION',
+  Colorless: 'COST',
+};
+
 function tooltipHTML(def) {
   const catLabel = def.sub ? `${def.cat} · ${def.sub}` : def.cat;
+  const resLabel = RESOURCE_LABEL[def.school] || 'COST';
   return `<div class="tt-name" style="color:${SCHOOL_COLORS[def.school]}">${def.glyph} ${def.name}</div>
-    <div class="tt-type">${def.school} · ${catLabel} · ${def.rarity} · Flow ${def.cost} · Channel ${def.channel}s${def.dur ? ' · Active ' + def.dur + 's' : ''}</div>
+    <div class="tt-type">${def.branch || def.school} · ${catLabel} · ${def.rarity} · ${resLabel} ${def.cost} · Channel ${def.channel}s${def.dur ? ' · Active ' + def.dur + 's' : ''}</div>
     <div class="tt-text">${def.text}</div>
     <div class="tt-tags">${def.tags.join(' · ')}</div>`;
 }
@@ -209,10 +237,6 @@ export function updateUI(game) {
   els.hpFill.style.width = `${(p.hp / p.maxHp) * 100}%`;
   els.hpText.textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`;
   els.armor.textContent = p.armor > 0 ? `⛨ ${Math.ceil(p.armor)}` : '';
-  const flowPct = (eng.flow / eng.maxFlow) * 100;
-  els.flowFill.style.width = `${flowPct}%`;
-  els.flowText.textContent = `${Math.floor(eng.flow)} / ${eng.maxFlow}`;
-  els.flowBar.classList.toggle('flow-full', eng.flow >= eng.maxFlow);
 
   // portrait plate: class glyph + world badge, plus the run clock
   const cls = CLASSES[game.playerClass];
@@ -225,15 +249,14 @@ export function updateUI(game) {
   const rt = Math.floor(game.runTime || 0);
   els.clock.textContent = `${Math.floor(rt / 60)}:${String(rt % 60).padStart(2, '0')}`;
 
-  // class resource (Rage / Opportunity)
+  // the single class resource (Mana / Rage / Focus) — Card System v2 §6
   const res = (cls || {}).resource;
   if (res && game.state !== 'title') {
     els.resWrap.classList.remove('hidden');
     els.resLabel.textContent = res.name;
-    const val = res.key === 'rage' ? game.rage : game.opportunity;
-    els.resFill.style.width = `${(val / res.max) * 100}%`;
+    els.resFill.style.width = `${(eng.flow / eng.maxFlow) * 100}%`;
     els.resFill.style.background = res.color;
-    els.resText.textContent = res.pips ? `${Math.floor(val)} / ${res.max}` : `${Math.floor(val)}`;
+    els.resText.textContent = res.pips ? `${Math.floor(eng.flow)} / ${eng.maxFlow}` : `${Math.floor(eng.flow)}`;
   } else {
     els.resWrap.classList.add('hidden');
   }
@@ -361,14 +384,14 @@ function popCard(def) {
 
 function rebuildPipeline(game) {
   const eng = game.engine;
-  els.deckCount.textContent = eng.deck.length;
-  els.discardCount.textContent = eng.discard.length;
 
-  // queue row
+  // queue row: only "next" and "following" are shown — Card System v2 §10.3/§20.
+  // The engine keeps buffering internally at eng.queueCap; only the rendered
+  // slice shrinks.
   els.queueRow.innerHTML = '';
   const newKnown = new Set();
-  eng.queue.forEach((inst, i) => {
-    const el = buildCardEl(inst.def, 'mini', inst.lvl || 0);
+  eng.queue.slice(0, VISIBLE_QUEUE_SLOTS).forEach((inst, i) => {
+    const el = buildCardEl(inst.def, 'mini', inst.lvl || 1);
     if (inst.cost !== inst.def.cost) el.querySelector('.card-cost').textContent = inst.cost;
     if (i === 0) {
       if (!eng.canAfford(inst)) el.classList.add('starved');
@@ -380,7 +403,7 @@ function rebuildPipeline(game) {
     newKnown.add(inst.uid);
   });
   knownQueueUids = newKnown;
-  for (let i = eng.queue.length; i < eng.queueCap; i++) {
+  for (let i = Math.min(eng.queue.length, VISIBLE_QUEUE_SLOTS); i < VISIBLE_QUEUE_SLOTS; i++) {
     const ghost = document.createElement('div');
     ghost.className = 'card mini ghost';
     els.queueRow.appendChild(ghost);
@@ -439,7 +462,14 @@ function rebuildRelics(game) {
       el.className = 'relic';
       el.style.setProperty('--c', r.color);
       el.textContent = r.glyph;
-      el.title = `${r.name} — ${r.text}`;
+      // relic enchant + counter share the relic's name (see applyRelic) —
+      // match back to the live enchant record to show a visible counter.
+      // Bespoke relics (no live enchant) keep their counter directly under
+      // game.relicState[relic.id].counter instead — check both.
+      const ench = game.engine.enchants.find((e) => e.name === r.name);
+      const counter = (ench && ench.counter) || (game.relicState[r.id] && game.relicState[r.id].counter);
+      const counterText = counter ? `\n${counter.label} ${counter.value}/${counter.max}` : '';
+      el.title = `${r.name} — ${r.text}${counterText}`;
     } else {
       el.className = 'relic empty';
     }
@@ -490,11 +520,12 @@ function syncSanctuary(game) {
     row.className = 'shop-row';
     const el = buildCardEl(def, 'mini');
     attachTooltip(el, def);
-    const price = CARD_PRICES[def.rarity];
+    const price = Math.round(CARD_PRICES[def.rarity] * game.buyPriceMult);
     const btn = document.createElement('button');
     btn.className = 'sanct-btn';
-    btn.textContent = `BUY ◈${price}`;
-    if (game.gold < price) btn.disabled = true;
+    const acquirable = canAcquireCard(game.deckIds, def.id);
+    btn.textContent = acquirable ? `BUY ◈${price}` : (game.deckIds.length >= 12 ? 'DECK FULL' : 'MAX COPIES');
+    if (game.gold < price || !acquirable) btn.disabled = true;
     btn.addEventListener('click', () => { buyCard(game, idx); });
     const name = document.createElement('div');
     name.className = 'shop-name';
@@ -508,7 +539,7 @@ function syncSanctuary(game) {
   els.sanctDeck.innerHTML = '';
   const groups = new Map();
   for (const e of game.deckIds) {
-    const key = e.id + ':' + (e.lvl || 0);
+    const key = e.id + ':' + (e.lvl || 1);
     groups.set(key, (groups.get(key) || 0) + 1);
   }
   for (const [key, count] of groups) {
@@ -533,7 +564,7 @@ function syncSanctuary(game) {
     }
     const sb = document.createElement('button');
     sb.className = 'sanct-btn';
-    sb.textContent = `SELL ◈${sellPrice({ id, lvl })}`;
+    sb.textContent = `SELL ◈${Math.round(sellPrice({ id, lvl }) * game.sellPriceMult)}`;
     if (game.deckIds.length <= 6) sb.disabled = true;
     sb.addEventListener('click', () => { sellCard(game, id, lvl); });
     row.appendChild(sb);
@@ -551,6 +582,11 @@ function syncOverlays(game) {
       let el;
       if (game.pendingReward.type === 'card') {
         el = buildCardEl(opt, 'full');
+        el.appendChild(buildDraftContext(game, opt));
+        if (!canAcquireCard(game.deckIds, opt.id) && game.deckIds.length < 12) {
+          el.classList.add('unavailable');
+          el.setAttribute('aria-disabled', 'true');
+        }
       } else {
         el = document.createElement('div');
         el.className = 'card full relic-card';
@@ -565,6 +601,11 @@ function syncOverlays(game) {
       }
       el.classList.add('pickable');
       el.addEventListener('click', () => {
+        if (game.pendingReward.type === 'card' && game.deckIds.length >= 12) {
+          renderReplacementPicker(els.rewardCards, els.rewardHeading, game, opt, () => syncOverlays(game));
+          return;
+        }
+        if (game.pendingReward.type === 'card' && !canAcquireCard(game.deckIds, opt.id)) return;
         sfx('enchant');
         applyReward(game, opt);
         syncOverlays(game);
@@ -573,6 +614,27 @@ function syncOverlays(game) {
     }
   } else {
     els.overlayReward.classList.add('hidden');
+  }
+
+  syncTalentOverlay(game);
+}
+
+function syncTalentOverlay(game) {
+  const active = game.state === 'talent' && Array.isArray(game.pendingTalentOptions);
+  els.overlayTalent.classList.toggle('hidden', !active);
+  if (!active) return;
+
+  els.talentOptions.innerHTML = '';
+  for (const talent of game.pendingTalentOptions) {
+    const button = document.createElement('button');
+    button.className = 'talent-option';
+    button.innerHTML = `<span class="branch">${talent.branch}</span><b>${talent.name}</b><span>${talent.text}</span>`;
+    button.addEventListener('click', () => {
+      if (!chooseTalent(game, talent.id)) return;
+      sfx('enchant');
+      syncOverlays(game);
+    });
+    els.talentOptions.appendChild(button);
   }
 }
 
@@ -591,4 +653,9 @@ function syncEndOverlay(game) {
     <span>☩ ${game.bossesSlain} bosses</span>
     <span>⚔ ${game.duelsWon} duels</span>
     <span>⌛ ${mins}:${String(secs).padStart(2, '0')}</span>`;
+}
+
+export function toggleBuildBoard(game) {
+  if (buildBoardIsOpen()) closeBuildBoard();
+  else if (game.state !== 'title') openBuildBoard(game);
 }

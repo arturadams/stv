@@ -1,7 +1,7 @@
 import { distToSegment } from '../../core/math.js';
 import { sfx } from '../../audio.js';
 import { aimAngle, hitEnemy, nearestEnemy, targetable } from '../combat.js';
-import { floater, shake, spark } from '../fx.js';
+import { floater, shake, sigil, spark } from '../fx.js';
 import { colorOf } from '../game.js';
 import { clampToRegion } from '../map/chunks.js';
 import { registerEffect } from './registry.js';
@@ -9,7 +9,7 @@ import { registerEffect } from './registry.js';
 // repositioning cards are not cast — they become your Dash for a while
 registerEffect('dashOverride', (game, eff, ctx) => {
   const p = game.player;
-  const dur = eff.dur * (1 + 0.15 * (ctx.lvl || 0));
+  const dur = eff.dur * (ctx.upgradeRank === 1 ? 1.15 : ctx.upgradeRank === 2 ? 1.3 : 1);
   game.dashOverride = { def: ctx.def, spec: eff.move, timeLeft: dur, dur, color: colorOf(ctx.def) };
   floater(game, p.x, p.y - 34, `DASH → ${ctx.def.name.toUpperCase()}`, colorOf(ctx.def), 13);
   sfx('enchant');
@@ -21,7 +21,9 @@ registerEffect('blink', (game, eff, ctx) => {
   const t = nearestEnemy(game, p.x, p.y);
   if (eff.away && t) a = Math.atan2(p.y - t.y, p.x - t.x);
   else a = Math.atan2(p.moveDir.y, p.moveDir.x);
-  spark(game, p.x, p.y, colorOf(ctx.def), 10, 140);
+  const color = colorOf(ctx.def);
+  // collapse the hero into a thin vertical sigil, leaving a fading afterimage
+  sigil(game, p.x, p.y, color, 'collapse');
   p.x += Math.cos(a) * eff.dist;
   p.y += Math.sin(a) * eff.dist;
   clampToRegion(game, p);
@@ -30,7 +32,9 @@ registerEffect('blink', (game, eff, ctx) => {
     p.empower = { ...eff.empower };
     floater(game, p.x, p.y - 30, 'EMPOWERED', '#a98fe0', 12);
   }
-  spark(game, p.x, p.y, colorOf(ctx.def), 10, 140);
+  // reconstruct with an outward pulse
+  sigil(game, p.x, p.y, color, 'reconstruct');
+  spark(game, p.x, p.y, color, 6, 110);
   sfx('blink');
 });
 

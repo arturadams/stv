@@ -2,7 +2,6 @@ import { EVT } from '../../core/events.js';
 import { sfx } from '../../audio.js';
 import { chainFrom, damagePlayer, enemiesIn, hitEnemy, targetable } from '../combat.js';
 import { shake, spark } from '../fx.js';
-import { gainRage } from '../player.js';
 import type { GameState } from '../types.js';
 
 export function updateProjectiles(game: GameState, dt: number): void {
@@ -46,9 +45,28 @@ export function updateProjectiles(game: GameState, dt: number): void {
         if (pr.hit.has(e.uid)) continue;
         pr.hit.add(e.uid);
       }
-      hitEnemy(game, e, pr.dmg, pr.ctx, pr.eff);
+      const bonus = pr.eff.bonusVsStatus;
+      const dmg = bonus && e.statuses[bonus.status] ? bonus.dmg : pr.dmg;
+      hitEnemy(game, e, dmg, pr.ctx, pr.eff);
       spark(game, pr.x, pr.y, pr.color, 5, 120, 0.35);
-      if (pr.ctx.basic) gainRage(game, 2);
+      // §7.2: every 4th landed Arcane Bolt grants +1 Mana — the fix for the
+      // Mage never gaining anything from a missed/hit basic attack.
+      if (pr.ctx.basic && game.playerClass === 'mage') {
+        game.resourceMeters.hitCount += 1;
+        if (game.resourceMeters.hitCount >= 4) {
+          game.resourceMeters.hitCount -= 4;
+          game.engine.gainFlow(1, 'basic_hit');
+        }
+      }
+      // Warlock corruption builds through contact with the outer dark:
+      // every fourth landed Eldritch Bolt restores one point.
+      if (pr.ctx.basic && game.playerClass === 'warlock') {
+        game.resourceMeters.hitCount += 1;
+        if (game.resourceMeters.hitCount >= 4) {
+          game.resourceMeters.hitCount -= 4;
+          game.engine.gainFlow(1, 'basic_hit');
+        }
+      }
       if (pr.eff.chainOnHit && !e.dead) chainFrom(game, e, pr.eff.chainOnHit, pr.ctx, pr.x, pr.y);
       if (pr.eff.explode) {
         const ex = pr.eff.explode;
@@ -83,7 +101,7 @@ export function updateProjectiles(game: GameState, dt: number): void {
     if (d < pr.r + p.r + 4) {
       if (p.iframes > 0 && p.dashT > 0 && !p.dodgeCredited) {
         p.dodgeCredited = true;
-        game.bus.emit(EVT.perfectDodge, {});
+        game.bus.emit(EVT.perfectDodge, { x: p.x, y: p.y });
       } else if (p.iframes <= 0 && p.untargetable <= 0) {
         damagePlayer(game, pr.dmg, pr.x, pr.y);
         pr.dead = true;

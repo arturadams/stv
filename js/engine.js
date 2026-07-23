@@ -15,14 +15,16 @@ import { makeRng } from './core/rng.js';
 import { runQueueOp } from './engine/queueOps.js';
 
 // Cards carry a level: duplicates combined at a Sanctuary grow stronger.
-export function makeCard(id, lvl = 0, uid = 0) {
+export function makeCard(id, lvl = 1, uid = 0) {
   const def = CARDS[id];
   if (!def) throw new Error('unknown card: ' + id);
   return { uid, def, cost: def.cost, lvl };
 }
 
 const ENCHANT_EVENTS = [EVT.statusApplied, EVT.enemyKilled, EVT.perfectDodge, EVT.queueEmpty,
-  EVT.playerHit, EVT.cardResolved, EVT.powerExpired, EVT.trapTriggered];
+  EVT.playerHit, EVT.cardResolved, EVT.powerExpired, EVT.trapTriggered,
+  EVT.statusExpired, EVT.criticalHit, EVT.enemyHit, EVT.bossHealthThreshold,
+  EVT.summonCreated, EVT.summonExpired, EVT.summonSacrificed, EVT.comboChanged];
 
 export class CardEngine {
   constructor(bus, rng = makeRng(Date.now())) {
@@ -51,18 +53,17 @@ export class CardEngine {
     this.resolveCard = null;       // (inst, buffs, preview, i) => void
     this.computePreview = null;    // (def, buffs) => preview | null
     this.runEnchantAction = null;  // (doSpec, payload, ench) => void
-    this.classChannelMult = null;  // (def) => mult — Rage / Opportunity hook
     this.followPos = null;         // {x, y} — set every frame so self-centered previews can follow the player
     const dispatch = (ev) => (p) => this.dispatchEnchants(ev, p);
     for (const ev of ENCHANT_EVENTS) bus.on(ev, dispatch(ev));
   }
 
-  makeCard(id, lvl = 0) {
+  makeCard(id, lvl = 1) {
     return makeCard(id, lvl, this.cardIds.next());
   }
 
   setDeck(entries) {
-    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl || 0));
+    this.deck = entries.map(e => typeof e === 'string' ? this.makeCard(e) : this.makeCard(e.id, e.lvl ?? 1));
     this.shuffleArray(this.deck);
     this.discard = []; this.queue = []; this.channel = null;
     this.powers = []; this.flushMode = null; this.gapT = 0;
@@ -141,7 +142,6 @@ export class CardEngine {
     this.flow -= cost;
     this.queue.shift();
     let dur = def.channel * buffs.channelMult * this.channelMultGlobal * this.nextChannelMult * flushSpeed;
-    if (this.classChannelMult) dur *= this.classChannelMult(def);
     this.nextChannelMult = 1;
     dur = Math.max(0, dur);
     const preview = this.computePreview ? this.computePreview(def, buffs) : null;
@@ -210,6 +210,17 @@ export class CardEngine {
     this.uiDirty = true;
   }
 
+  // extends only the one Power matching id — used by relics (e.g. Endless
+  // Fury) that should extend the specific Power that's expiring, not every
+  // other unrelated Power that happens to be active at the same time
+  extendPower(id, sec) {
+    const pw = this.powers.find((p) => p.id === id);
+    if (!pw) return;
+    pw.timeLeft += sec;
+    pw.dur += sec;
+    this.uiDirty = true;
+  }
+
   // Merge every active power's basic-attack modifications.
   basicMods() {
     const m = { override: null, addStatus: [], arcMult: 1, dmgMult: 1, rateMult: 1, extraEvery: 0 };
@@ -225,9 +236,12 @@ export class CardEngine {
     return m;
   }
 
-  powerChannelMult() {
+  powerChannelMult(def) {
     let mult = 1;
-    for (const pw of this.powers) if (pw.spec.channelMult) mult *= pw.spec.channelMult;
+    for (const pw of this.powers) {
+      if (pw.spec.channelMult) mult *= pw.spec.channelMult;
+      if (def?.cat === 'Signature' && pw.spec.signatureChannelMult) mult *= pw.spec.signatureChannelMult;
+    }
     return mult;
   }
 
@@ -249,6 +263,8 @@ export class CardEngine {
       name: label.name, glyph: label.glyph, color: label.color,
       timeLeft: spec.dur ?? Infinity, on: spec.on, filter: spec.filter || null,
       chance: spec.chance ?? 1, do: spec.do, relic: !spec.dur,
+      uncapped: !!spec.uncapped,
+      counter: null, // lazily created by the 'incrementCounter' enchant action
     });
     this.uiDirty = true;
   }
@@ -260,6 +276,17 @@ export class CardEngine {
         if (e.filter.status && payload.status !== e.filter.status) continue;
         if (e.filter.hasStatus && !(payload.enemy && payload.enemy.statuses[e.filter.hasStatus])) continue;
         if (e.filter.school && payload.school !== e.filter.school) continue;
+        if (e.filter.cardId && payload.inst?.def?.id !== e.filter.cardId) continue;
+        if (e.filter.keyword && !(payload.inst?.def?.keywords || []).includes(e.filter.keyword)) continue;
+        if (e.filter.boss && !payload.enemy?.def?.boss) continue;
+        if (e.filter.elite && !payload.enemy?.def?.elite) continue;
+        if (e.filter.maxPct != null && !(payload.pct != null && payload.pct <= e.filter.maxPct)) continue;
+        if (e.filter.cat && payload.inst?.def?.cat !== e.filter.cat) continue;
+        if (e.filter.notRarity && payload.inst?.def?.rarity === e.filter.notRarity) continue;
+        if (e.filter.minAmount != null && !(payload.amount != null && payload.amount >= e.filter.minAmount)) continue;
+        if (e.filter.summonFamily && payload.summon?.summonFamily !== e.filter.summonFamily) continue;
+        if (e.filter.excludeRelicSummon && payload.summon?.isRelicSummon) continue;
+        if (e.filter.excludeForced && payload.forced) continue;
       }
       if (e.chance < 1 && !this.rng.chance(e.chance)) continue;
       if (this.runEnchantAction) this.runEnchantAction(e.do, payload, e);
@@ -303,7 +330,7 @@ export class CardEngine {
       this.startChannel();
     }
     if (this.channel) {
-      this.channel.t += dt * this.hasteMult * (1 / this.powerChannelMult());
+      this.channel.t += dt * this.hasteMult * (1 / this.powerChannelMult(this.channel.inst.def));
       // self-centered previews follow the player
       if (this.channel.preview && this.channel.preview.follow && this.followPos) {
         this.channel.preview.x = this.followPos.x;

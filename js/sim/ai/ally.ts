@@ -26,9 +26,16 @@ export function updateAlly(game: GameState, dt: number): void {
   al.attackT -= dt;
   const target = nearestEnemy(game, al.x, al.y, undefined, 460);
   if (al.attackT <= 0 && target) {
-    al.attackT = al.cls === 'rogue' ? 0.45 : al.cls === 'warrior' ? 0.8 : 0.6;
+    al.attackT = al.cls === 'rogue' ? 0.45
+      : al.cls === 'warrior' ? 0.8
+      : al.cls === 'druid' ? 0.65
+      : al.cls === 'necromancer' ? 0.7
+      : al.cls === 'warlock' ? 0.75
+      : 0.6;
     const a = Math.atan2(target.y - al.y, target.x - al.x);
-    const element: ElementId = al.cls === 'mage' ? 'arcane' : 'physical';
+    const element: ElementId = al.cls === 'mage' ? 'arcane'
+      : al.cls === 'necromancer' || al.cls === 'warlock' ? 'shadow'
+      : 'physical';
     const ctx = { def: { element }, buffs: {}, dmgMult: 1 };
     spawnPlayerProj(game, al.x, al.y, a, { dmg: 6, speed: 640, radius: 4, critChance: 0.1, element, life: 1.4 }, ctx);
     sfx('cast', element);
@@ -39,7 +46,7 @@ export function updateAlly(game: GameState, dt: number): void {
     al.castT = game.rng.range(8, 11);
     const tx2 = target.x;
     const ty2 = target.y;
-    const card = al.featured.find((c) => c.cat === 'Spell') || al.featured[0];
+    const card = al.featured.find((c) => c.cat === 'Signature') || al.featured[0];
     const color = card ? colorOf(card) : al.color;
     al.casting = { def: card, t: 0, dur: 1.4 };
     game.telegraphs.push({

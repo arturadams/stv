@@ -7,9 +7,11 @@
 export { createGame, colorOf } from './sim/game.js';
 export { updateGame } from './sim/update.js';
 export {
-  advanceWorld, prepareRun, rollStartingDeck, startRun,
+  advanceWorld, canAcquireCard, canReplaceCard, prepareRun, rollStartingDeck, startRun,
 } from './sim/run/lifecycle.js';
 export { applyReward } from './sim/run/rewards.js';
+export { replaceRewardCard } from './sim/run/replacement.js';
+export { chooseTalent } from './sim/run/talents.js';
 export { resolveEncounterChoice } from './sim/run/matchmaking.js';
 export {
   CARD_PRICES, MAX_CARD_LVL, buyCard, combineCards, leaveSanctuary, sellCard, sellPrice,

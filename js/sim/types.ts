@@ -1,6 +1,7 @@
 import type { EventBus } from '../core/events.js';
 import type { UidCounter } from '../core/ids.js';
 import type { Rng } from '../core/rng.js';
+import type { SummonFamily } from '../data/summonFamilies.js';
 import type {
   Buffs,
   CardDef,
@@ -20,6 +21,7 @@ import type {
   Sanctuary,
   StatusApp,
   SustainedDo,
+  TalentDefinition,
   ZoneRegion,
 } from '../data/types.js';
 import type { CardEngine } from '../engine.js';
@@ -29,7 +31,7 @@ export interface Vec2 {
   y: number;
 }
 
-export type GameMode = 'title' | 'combat' | 'reward' | 'sanctuary' | 'gameover';
+export type GameMode = 'title' | 'combat' | 'reward' | 'talent' | 'sanctuary' | 'gameover';
 
 export interface Input {
   up: boolean;
@@ -69,6 +71,10 @@ export interface PlayerState extends Vec2 {
 
 export interface Camera extends Vec2 {
   shake: number;
+  /** Directional recoil kick (screen-space px), decays fast — distinct from
+   * the random jitter of `shake`. Set by `impulse()` in fx.ts. */
+  impulseX: number;
+  impulseY: number;
 }
 
 export interface MatchmakingState {
@@ -95,6 +101,7 @@ export interface BasicCombatCtx {
   buffs: Partial<Buffs>;
   dmgMult: number;
   basic?: boolean;
+  relicId?: string;
 }
 
 export type CombatCtx = EffectCtx | BasicCombatCtx;
@@ -199,6 +206,8 @@ export interface Summon extends Vec2 {
   fireRate: number;
   dmg: number;
   ctx: EffectCtx;
+  summonFamily: SummonFamily;
+  isRelicSummon: boolean;
 }
 
 export interface Pickup extends Vec2 {
@@ -237,11 +246,14 @@ interface FxBase {
 }
 
 export type Fx =
-  | (FxBase & Vec2 & { kind: 'ring' | 'blast' | 'spawn'; r: number })
+  | (FxBase & Vec2 & { kind: 'ring' | 'spawn'; r: number })
+  | (FxBase & Vec2 & { kind: 'blast'; r: number; dir?: number })
   | (FxBase & Vec2 & { kind: 'rectblast'; w: number; h: number; ang?: number })
   | (FxBase & Vec2 & { kind: 'arc'; ang: number; arc: number; range: number })
   | (FxBase & { kind: 'bolt' | 'streak'; x1: number; y1: number; x2: number; y2: number })
-  | (FxBase & Vec2 & { kind: 'cast' });
+  | (FxBase & Vec2 & { kind: 'cast' })
+  | (FxBase & Vec2 & { kind: 'impactFlash'; dir?: number; crit?: boolean })
+  | (FxBase & Vec2 & { kind: 'sigil'; phase: 'collapse' | 'reconstruct' });
 
 export interface DashOverride {
   def: CardDef;
@@ -273,6 +285,37 @@ export interface PortalState extends Vec2 {
 export interface DeckEntry {
   id: string;
   lvl: number;
+  source?: 'starting' | 'acquired';
+}
+
+export interface ChoiceHistoryEvent {
+  time: number;
+  level: number;
+  source: string;
+  text: string;
+}
+
+// per-class resource-gain bookkeeping — one small bag instead of separate
+// Rage/Opportunity state, since only one class's gain rules read it at a
+// time. `hitCount` is reused for the Mage bolt-counter and the Warrior
+// swing-counter. See player.ts's tickResourceRegen and combat.ts's
+// isActiveCombat.
+export interface ResourceMeters {
+  regenT: number;
+  armorBlockCd: number;
+  damageTakenCd: number;
+  critCd: number;
+  hitCount: number;
+}
+
+export interface CoreRuntimeState {
+  active: Record<string, number>;
+  cooldowns: Record<string, number>;
+  challengedUid: number | null;
+  recentCrits: Map<number, number[]>;
+  dooms: Array<{ enemy: EnemyState; t: number; damage: number }>;
+  healing: Array<{ remaining: number; rate: number }>;
+  healAccumulator: number;
 }
 
 export interface GameState {
@@ -288,9 +331,9 @@ export interface GameState {
   world: number;
   playerClass: ClassId;
   player: PlayerState;
-  rage: number;
-  rageDecayT: number;
-  opportunity: number;
+  lastCombatT: number;
+  resourceMeters: ResourceMeters;
+  core: CoreRuntimeState;
   dashOverride: DashOverride | null;
   enemies: EnemyState[];
   projectiles: Projectile[];
@@ -309,6 +352,15 @@ export interface GameState {
   relicRadiusMult: number;
   hasDuelist: boolean;
   hasCrossClass: boolean;
+  goldMult: number;
+  sellPriceMult: number;
+  buyPriceMult: number;
+  declinedRelics: Array<{ id: string; expiresAtBoss: number }>;
+  damageReductionCap: number;
+  // per-relic scratch state (cooldown timers, rolling windows, hysteresis
+  // flags) for the small set of relics that need more than a declarative
+  // enchant — see js/sim/effects/relicMechanics.ts
+  relicState: Record<string, unknown>;
   camera: Camera;
   chunks: Map<string, Chunk>;
   portal: PortalState | null;
@@ -323,7 +375,6 @@ export interface GameState {
   pendingReward: PendingReward | null;
   rewardQueue: PendingReward[];
   stolen: StolenCard | null;
-  dangerT: number;
   kills: number;
   runTime: number;
   campsCleared: number;
@@ -333,6 +384,13 @@ export interface GameState {
   spawnT: number;
   gold: number;
   sanctuary: Sanctuary | null;
+  chosenTalents: string[];
+  offeredTalents: string[];
+  pendingTalentOptions: TalentDefinition[] | null;
+  choiceHistory: ChoiceHistoryEvent[];
+  runLevel: number;
+  runXp: number;
+  nextLevelXp: number;
   deckIds: DeckEntry[];
   stateLabel: string;
   uiDirty: boolean;

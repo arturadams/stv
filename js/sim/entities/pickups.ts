@@ -24,8 +24,9 @@ export function updatePickups(game: GameState, dt: number): void {
         game.engine.gainFlow(1, 'shard');
         sfx('shard');
       } else if (pk.kind === 'gold') {
-        game.gold += pk.value || 1;
-        floater(game, p.x, p.y - 26, `+${pk.value || 1}◈`, '#ffd97a', 12);
+        const amount = Math.round((pk.value || 1) * game.goldMult);
+        game.gold += amount;
+        floater(game, p.x, p.y - 26, `+${amount}◈`, '#ffd97a', 12);
         sfx('shard');
       } else {
         p.hp = Math.min(p.maxHp, p.hp + 10);

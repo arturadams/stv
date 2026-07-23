@@ -1,44 +1,31 @@
 import { CLASSES } from '../data/index.js';
-import type { CardDef } from '../data/types.js';
 import { EVT } from '../core/events.js';
 import { distToSegment } from '../core/math.js';
 import { sfx } from '../audio.js';
-import { applyStatus, hitEnemy, nearestEnemy, targetable } from './combat.js';
-import type { FxState } from './fx.js';
-import { floater, shake, spark } from './fx.js';
+import { applyStatus, hitEnemy, isActiveCombat, nearestEnemy, targetable } from './combat.js';
+import { floater, shake, sigil, spark } from './fx.js';
 import { chunksNear, clampToRegion } from './map/chunks.js';
 import type { DashOverride, GameState, Input } from './types.js';
 
-type ResourceState = Pick<GameState, 'playerClass' | 'rage' | 'rageDecayT'>;
-type OpportunityState = Pick<GameState, 'playerClass' | 'opportunity' | 'player'> & FxState;
-type ChannelMultState = Pick<GameState, 'playerClass' | 'rage' | 'opportunity' | 'player'> & FxState;
-
 // ═══ class resources ═══
-export function gainRage(game: ResourceState, n: number): void {
-  if (game.playerClass !== 'warrior') return;
-  game.rage = Math.min(100, game.rage + n);
-  game.rageDecayT = 2.5;
-}
-
-export function gainOpportunity(game: OpportunityState, n: number): void {
-  if (game.playerClass !== 'rogue') return;
-  const before = game.opportunity;
-  game.opportunity = Math.min(CLASSES.rogue.resource.max, game.opportunity + n);
-  if (game.opportunity > before) {
-    floater(game, game.player.x, game.player.y - 34, 'OPPORTUNITY', '#8ade6a', 11);
+// The single per-class resource (Mana/Rage/Focus/Souls/Spirit/Corruption) lives on `game.engine`
+// (flow/maxFlow) — see Card System v2 (rework_cards.md) §6-9. This just
+// ticks passive regen while in active combat and cools down the per-class
+// gain cooldowns tracked in `game.resourceMeters` (see combat.ts's gain
+// call sites: armor block, damage taken, critical hit).
+export function tickResourceRegen(game: GameState, dt: number): void {
+  const rm = game.resourceMeters;
+  if (rm.armorBlockCd > 0) rm.armorBlockCd -= dt;
+  if (rm.damageTakenCd > 0) rm.damageTakenCd -= dt;
+  if (rm.critCd > 0) rm.critCd -= dt;
+  if (!isActiveCombat(game)) return;
+  rm.regenT -= dt;
+  if (rm.regenT <= 0) {
+    // The Mirror of Echoes (design doc §10.5): passive resource regen -25%
+    const mirrorPenalty = game.relics.some((r) => r.id === 'the_mirror_of_echoes') ? 1.333 : 1;
+    rm.regenT = CLASSES[game.playerClass].resource.regenInterval * mirrorPenalty;
+    game.engine.gainFlow(1, 'passive_combat');
   }
-}
-
-export function classChannelMult(game: ChannelMultState, def: CardDef): number {
-  if (game.playerClass === 'warrior' && def.school === 'Warrior' && game.rage > 0) {
-    return 1 / (1 + (game.rage / 100) * 0.8); // up to 80% faster at full Rage
-  }
-  if (game.playerClass === 'rogue' && def.school === 'Rogue' && game.opportunity > 0) {
-    game.opportunity -= 1; // spend a stack to quicken the card
-    floater(game, game.player.x, game.player.y - 30, 'QUICKENED', '#8ade6a', 12);
-    return 0.6;
-  }
-  return 1;
 }
 
 // ═══ movement, dash, and the card-granted dash override ═══
@@ -82,6 +69,9 @@ export function updatePlayer(game: GameState, dt: number, input: Input): void {
   input.dash = false;
 
   let speed = p.speed;
+  for (const power of game.engine.powers as Array<{ spec: { moveSpeedMult?: number } }>) {
+    if (power.spec.moveSpeedMult) speed *= power.spec.moveSpeedMult;
+  }
   for (const ch of chunksNear(game, p.x, p.y, 1)) {
     for (const pool of ch.pools) {
       if (Math.hypot(p.x - pool.x, p.y - pool.y) < pool.r) speed *= 0.6;
@@ -139,7 +129,9 @@ export function performOverrideDash(game: GameState, ov: DashOverride): void {
   p.iframes = Math.max(p.iframes, 0.35);
   p.dashT = 0.1;
   p.dashDir = { x: 0, y: 0 }; // grazing projectiles still count as perfect dodges
-  spark(game, x0, y0, ov.color, 10, 140);
+  // collapse into a thin vertical sigil, leaving a fading afterimage
+  if (s.kind === 'blink') sigil(game, x0, y0, ov.color, 'collapse');
+  else spark(game, x0, y0, ov.color, 10, 140);
   p.x += dir.x * s.dist;
   p.y += dir.y * s.dist;
   clampToRegion(game, p);
@@ -152,12 +144,19 @@ export function performOverrideDash(game: GameState, ov: DashOverride): void {
     });
   }
   if (s.kind === 'blink') {
-    if (s.untargetable) p.untargetable = Math.max(p.untargetable, s.untargetable);
+    // Black Veil (design doc §6.1, revised): Shadowstep's decoy — extends
+    // the untargetable window instead of adding real AI-retargeting, so
+    // "enemies prioritize the decoy" and "the player takes no hits" land on
+    // the same observable outcome without touching every enemy AI file
+    const blackVeil = ov.def.id === 'shadowstep' && game.relics.some((r) => r.id === 'black_veil');
+    const untargetable = blackVeil ? 1.5 : s.untargetable;
+    if (untargetable) p.untargetable = Math.max(p.untargetable, untargetable);
     if (s.empower) {
       p.empower = { ...s.empower };
       floater(game, p.x, p.y - 30, 'EMPOWERED', ov.color, 12);
     }
-    spark(game, p.x, p.y, ov.color, 10, 140);
+    // reconstruct with an outward pulse
+    sigil(game, p.x, p.y, ov.color, 'reconstruct');
     sfx('blink');
   } else {
     // charge: damage and drag everything along the path

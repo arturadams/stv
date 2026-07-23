@@ -19,8 +19,9 @@ registerEffect('zone', (game, eff, ctx) => {
     x = t ? t.x : p.x;
     y = t ? t.y : p.y;
   }
+  const durationScale = ctx.upgradeRank === 1 ? 1.15 : ctx.upgradeRank === 2 ? 1.3 : 1;
   game.zones.push({
-    x, y, r: eff.r * ctx.radMult, t: 0, duration: eff.duration * (1 + 0.15 * (ctx.lvl || 0)),
+    x, y, r: eff.r * ctx.radMult, t: 0, duration: eff.duration * durationScale,
     tickDmg: eff.tickDmg, tickRate: eff.tickRate || 0.5, tickT: 0,
     status: eff.status || null, slow: eff.slow || 0, follow,
     color: ELEMENT_COLORS[ctx.def.element], element: ctx.def.element, ctx,
